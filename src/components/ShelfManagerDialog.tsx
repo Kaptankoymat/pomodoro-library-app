@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { LibraryDialog } from "@/components/LibraryDialog";
 import { Archive, BookOpen, ChevronRight, Trash2, X } from "lucide-react";
 import type { ArchivedBook, LibraryShelf } from "@/types/library";
 import { libraryTheme } from "@/lib/libraryTheme";
@@ -26,29 +27,24 @@ export const ShelfManagerDialog = ({
 }: ShelfManagerDialogProps) => {
   const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
   const pendingShelf = shelves.find((shelf) => shelf.id === pendingDeletionId) ?? null;
+  const cancelDeletionRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+    if (pendingDeletionId) {
+      cancelDeletionRef.current?.focus();
+    }
+  }, [pendingDeletionId]);
 
   return (
-    <div
+    <LibraryDialog
       aria-labelledby="shelf-manager-title"
-      aria-modal="true"
       className="fixed inset-0 z-[75] flex items-end bg-[#140f0b]/76 p-3 backdrop-blur-sm sm:items-center sm:justify-center sm:p-5"
-      role="dialog"
+      onClose={pendingShelf ? () => setPendingDeletionId(null) : onClose}
     >
       <section
-        className={`max-h-[min(760px,calc(100dvh-1.5rem))] w-full max-w-2xl overflow-hidden rounded-md border shadow-2xl shadow-black/45 ${libraryTheme.current.panel}`}
+        className={`flex max-h-[min(760px,calc(100dvh-1.5rem))] w-full max-w-2xl flex-col overflow-hidden rounded-md border shadow-2xl shadow-black/45 ${libraryTheme.current.panel}`}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-[#bba88c] px-4 py-4 sm:px-6">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#bba88c] px-4 py-4 sm:px-6">
           <div>
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#8a6040]">
               <Archive aria-hidden className="h-4 w-4" />
@@ -71,7 +67,7 @@ export const ShelfManagerDialog = ({
           </button>
         </header>
 
-        <div className="max-h-[calc(100dvh-12rem)] space-y-6 overflow-y-auto px-4 py-5 sm:px-6">
+        <div className="min-h-0 space-y-6 overflow-y-auto px-4 py-5 sm:px-6">
           <section aria-labelledby="shelf-list-title">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
@@ -98,6 +94,7 @@ export const ShelfManagerDialog = ({
                     }`}
                   >
                     <button
+                      aria-current={isActive ? "true" : undefined}
                       className="min-w-0 flex flex-1 items-center gap-3 rounded-[3px] px-2 py-2 text-left"
                       type="button"
                       onClick={() => {
@@ -139,6 +136,7 @@ export const ShelfManagerDialog = ({
                 </p>
                 <div className="mt-3 flex justify-end gap-2">
                   <button
+                    ref={cancelDeletionRef}
                     className={`h-9 rounded-[4px] px-3 text-sm font-semibold ${libraryTheme.current.secondaryButton} ${libraryTheme.current.focusRing}`}
                     type="button"
                     onClick={() => setPendingDeletionId(null)}
@@ -146,7 +144,8 @@ export const ShelfManagerDialog = ({
                     Vazgeç
                   </button>
                   <button
-                    className="h-9 rounded-[4px] bg-[#a3482d] px-3 text-sm font-semibold text-white transition hover:bg-[#883a24]"
+                    className="h-9 rounded-[4px] bg-[#a3482d] px-3 text-sm font-semibold text-white transition hover:bg-[#883a24] disabled:opacity-50"
+                    disabled={shelves.length <= 1}
                     type="button"
                     onClick={() => {
                       onDeleteShelf(pendingShelf.id);
@@ -203,6 +202,6 @@ export const ShelfManagerDialog = ({
           </section>
         </div>
       </section>
-    </div>
+    </LibraryDialog>
   );
 };

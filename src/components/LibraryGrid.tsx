@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion, type Transition } from "framer-motion";
+import { MotionConfig, motion, type Transition } from "framer-motion";
 import {
   BookOpen,
   Check,
@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { BookNoteDialog } from "@/components/BookNoteDialog";
+import { LibraryDialog } from "@/components/LibraryDialog";
 import { ShelfManagerDialog } from "@/components/ShelfManagerDialog";
 import { TimerControlDialog } from "@/components/TimerControlDialog";
 import { useGridMetrics } from "@/hooks/useGridMetrics";
@@ -95,6 +96,7 @@ import {
   getBooks,
 } from "@/lib/libraryStats";
 import { normalizeLibraryStateForRuntime } from "@/lib/libraryStateMigration";
+import { parseLibraryBackup } from "@/lib/libraryBackup";
 import {
   applyStickyTaskSize,
   getActiveTasks,
@@ -710,6 +712,7 @@ const ShelfScene = ({
     gap: 8,
     cellAspectRatio: 3.36,
     measurementEpsilon: GRID_MEASUREMENT_EPSILON,
+    fitToHeight: false,
   });
   const suppressObjectOpenRef = useRef(false);
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -1327,10 +1330,11 @@ const ShelfScene = ({
           );
         })}
 
-        <div className="relative h-full w-full overflow-x-auto overflow-y-hidden overscroll-x-contain">
+        <div className="relative h-full w-full overflow-auto overscroll-contain" aria-label="Raf alanı" tabIndex={0}>
         <div
           ref={containerRef}
           className="relative flex h-full min-w-[1000px] items-start justify-center overflow-hidden rounded-t-[4px] rounded-b-none border border-[#7a4828] border-b-0 bg-[#4a2817] px-[86px] pb-8 pt-14 sm:px-[120px] sm:pb-8 sm:pt-16 lg:min-w-0"
+          style={{ minHeight: getShelfVisualHeight(metrics) + 220 }}
         >
           <div
             ref={gridRef}
@@ -1702,35 +1706,22 @@ const itemKindLabel: Record<LibraryItemKind, string> = {
 
 type TaskModalProps = {
   tasks: LibraryTask[];
-  onAddTask: (title: string) => void;
+  onAddTask: (title: string) => Promise<boolean>;
   onClose: () => void;
   onToggleTask: (taskId: string) => void;
 };
 
 const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask }: TaskModalProps) => {
   const [draftTask, setDraftTask] = useState("");
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   return (
-    <div
-      aria-modal="true"
+    <LibraryDialog
+      aria-labelledby="task-dialog-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm"
-      role="dialog"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
+      onClose={onClose}
+      dismissOnBackdrop
     >
       <div className="w-full max-w-md rounded-md border border-[#bba88c] bg-[#f4efe6] text-[#2f251b] shadow-2xl shadow-[#4a3b2c]/25">
         <div className="flex items-center justify-between border-b border-[#c5b49e] px-5 py-4">
@@ -1748,16 +1739,22 @@ const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask }: TaskModalProps) 
         <div className="grid max-h-[calc(100dvh-9rem)] gap-4 overflow-y-auto px-5 py-5">
           <form
             className="flex gap-2"
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
               event.preventDefault();
               const title = draftTask.trim();
 
-              if (!title) {
+              if (!title || isSaving) {
                 return;
               }
 
-              onAddTask(title);
-              setDraftTask("");
+              setIsSaving(true);
+              setSaveError(null);
+              try {
+                if (await onAddTask(title)) setDraftTask("");
+                else setSaveError("Görev kaydedilemedi. Taslağın korunuyor; tekrar deneyebilirsin.");
+              } finally {
+                setIsSaving(false);
+              }
             }}
           >
             <input
@@ -1765,11 +1762,14 @@ const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask }: TaskModalProps) 
               aria-label="Yeni görev"
               className="min-w-0 flex-1 rounded-md border border-[#bba88c] bg-[#fffaf1] px-3 text-sm text-[#2f251b] outline-none focus:border-[#8a6040]"
               placeholder="Görev"
+              maxLength={300}
+              disabled={isSaving}
               value={draftTask}
               onChange={(event) => setDraftTask(event.target.value)}
             />
             <button
               aria-label="Görev ekle"
+              disabled={isSaving || !draftTask.trim()}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-200 text-stone-950 transition hover:bg-amber-100"
               type="submit"
             >
@@ -1777,10 +1777,13 @@ const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask }: TaskModalProps) 
             </button>
           </form>
 
+          {saveError ? <p role="alert" className="text-sm text-red-800">{saveError}</p> : null}
+          {tasks.length === 0 ? <p className="text-sm text-[#6e5c47]">İlk görevini ekleyerek başlayabilirsin.</p> : null}
           <div className="grid gap-2">
             {tasks.map((task) => (
               <button
                 key={task.id}
+                aria-pressed={task.done}
                 className={`flex items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition ${
                   task.done
                     ? "border-emerald-600/35 bg-emerald-100 text-emerald-950"
@@ -1800,7 +1803,7 @@ const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask }: TaskModalProps) 
                 </span>
                 <span
                   className={
-                    task.done ? "line-through decoration-stone-400 text-[#9c8975]" : ""
+                    `min-w-0 break-words ${task.done ? "line-through decoration-stone-400 text-[#796650]" : ""}`
                   }
                 >
                   {task.title}
@@ -1810,7 +1813,7 @@ const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask }: TaskModalProps) 
           </div>
         </div>
       </div>
-    </div>
+    </LibraryDialog>
   );
 };
 
@@ -2331,6 +2334,7 @@ export const LibraryGrid = () => {
     if (completedSummary && wasPersisted) {
       setRewardSummary(completedSummary);
     }
+    return wasPersisted;
   }, [setLibraryState]);
 
   const timer = usePomodoroTimer({
@@ -2357,16 +2361,18 @@ export const LibraryGrid = () => {
     }));
   }, [setLibraryState]);
 
-  const pauseFocusTimer = useCallback(() => {
+  const pauseFocusTimer = useCallback(async () => {
     const now = Date.now();
-
-    void setLibraryState((currentState) => ({
+    const saved = await setLibraryState((currentState) => ({
       ...currentState,
       activeFocusSession: currentState.activeFocusSession
         ? pauseFocusSession(currentState.activeFocusSession, now)
         : null,
     }));
-  }, [setLibraryState]);
+    if (saved.activeFocusSession && getFocusElapsedSeconds(saved.activeFocusSession, now) >= saved.activeFocusSession.durationSeconds) {
+      await completeSession(saved.activeFocusSession.id);
+    }
+  }, [completeSession, setLibraryState]);
 
   const resetFocusTimer = useCallback(() => {
     void setLibraryState((currentState) => ({
@@ -2377,15 +2383,26 @@ export const LibraryGrid = () => {
 
   const finishFocusTimer = useCallback(async () => {
     const completedAt = Date.now();
-
-    await setLibraryState((currentState) => {
+    let summary: FocusRewardSummary | null = null;
+    let completedId: string | null = null;
+    const saved = await setLibraryState((currentState) => {
+      const session = currentState.activeFocusSession;
+      if (session && getFocusElapsedSeconds(session, completedAt) >= session.durationSeconds) {
+        const result = completeNaturalFocusSession({ state: currentState, sessionId: session.id, completedAt });
+        summary = result.summary;
+        completedId = session.id;
+        return result.state;
+      }
       return endFocusSessionEarly(currentState, completedAt);
     });
+    if (summary && saved.focusSessions?.some((session) => session.id === completedId)) {
+      setRewardSummary(summary);
+    }
   }, [setLibraryState]);
 
   const selectFocusBook = useCallback(
     (bookId: string) => {
-      setLibraryState((currentState) => ({
+      void setLibraryState((currentState) => currentState.items.some((item) => item.id === bookId && isBookItem(item)) ? ({
         ...currentState,
         selectedBookId: bookId,
         selectedFocusItemId: bookId,
@@ -2395,8 +2412,9 @@ export const LibraryGrid = () => {
               targetBookId: bookId,
             }
           : currentState.activeFocusSession,
-      }));
+      }) : currentState);
       setIsFocusTargetSelectionMode(false);
+      setIsTimerOpen(true);
     },
     [setLibraryState],
   );
@@ -2609,15 +2627,14 @@ export const LibraryGrid = () => {
       const openedBook = selectedNoteBaselineRef.current;
       let conflict = false;
 
-      await setLibraryState((currentState) => {
+      const saved = await setLibraryState((currentState) => {
         const currentBook = currentState.items.find(
           (item): item is BookItem => item.id === bookId && isBookItem(item),
         );
         if (
           currentBook &&
-          (currentBook.title !== openedBook?.title ||
-            (currentBook.noteUpdatedAt !== openedBook?.noteUpdatedAt &&
-              currentBook.note !== openedBook?.note))
+          (openedBook?.id !== bookId || currentBook.title !== openedBook.title ||
+            currentBook.note !== openedBook.note)
         ) {
           conflict = true;
           return currentState;
@@ -2642,10 +2659,14 @@ export const LibraryGrid = () => {
         setStorageNotice(
           "Bu not başka bir sekmede değişti. Taslağın korunuyor; güncel notu görmek için pencereyi kapatıp yeniden aç.",
         );
-        return;
+        return false;
       }
-
+      const savedBook = saved.items.find((item) => item.id === bookId && isBookItem(item));
+      if (!savedBook || savedBook.title !== data.title || (savedBook.note ?? "") !== data.note) {
+        return false;
+      }
       setSelectedNoteBookId(null);
+      return true;
     },
     [setLibraryState],
   );
@@ -2669,10 +2690,7 @@ export const LibraryGrid = () => {
     async (file: File) => {
       try {
         const rawValue = await file.text();
-        const parsed = JSON.parse(rawValue) as {
-          data?: { items?: unknown[]; shelves?: unknown[]; tasks?: unknown[] };
-        };
-        const summary = parsed.data;
+        const summary = parseLibraryBackup(rawValue);
         const shouldImport = window.confirm(
           `Bu yedek ${summary?.shelves?.length ?? 0} raf, ${summary?.items?.length ?? 0} eşya ve ${summary?.tasks?.length ?? 0} görev içeriyor. Mevcut kütüphane değiştirilsin mi?`,
         );
@@ -2681,6 +2699,9 @@ export const LibraryGrid = () => {
         }
 
         await persistence.importData(rawValue);
+        setIsFocusTargetSelectionMode(false);
+        closeWardrobe();
+        setRewardSummary(null);
         setStorageNotice("Yedek doğrulandı ve yüklendi.");
       } catch (error) {
         setStorageNotice(
@@ -2688,7 +2709,7 @@ export const LibraryGrid = () => {
         );
       }
     },
-    [persistence],
+    [closeWardrobe, persistence],
   );
 
   const addShelf = useCallback(() => {
@@ -2846,13 +2867,16 @@ export const LibraryGrid = () => {
   );
 
   const addTask = useCallback(
-    (title: string) => {
-      setLibraryState((currentState) => {
+    async (title: string) => {
+      const trimmedTitle = title.trim();
+      if (!trimmedTitle) return false;
+      const taskId = createLibraryId("task");
+      const saved = await setLibraryState((currentState) => {
         const createdAt = Date.now();
         const tasks = [
           {
-            id: createLibraryId("task"),
-            title,
+            id: taskId,
+            title: trimmedTitle,
             done: false,
             createdAt,
             updatedAt: createdAt,
@@ -2866,20 +2890,26 @@ export const LibraryGrid = () => {
           items: applyStickyTaskSize(currentState.items, tasks),
         };
       });
+      return saved.tasks.some((task) => task.id === taskId);
     },
     [setLibraryState],
   );
 
   const archiveBook = useCallback(
-    (bookId: string, data: { title: string; note: string }) => {
+    async (bookId: string, data: { title: string; note: string }) => {
       const archivedAt = Date.now();
-
-      setLibraryState((currentState) => {
+      const openedBook = selectedNoteBaselineRef.current;
+      let conflict = false;
+      const saved = await setLibraryState((currentState) => {
         const book = currentState.items.find(
           (item): item is BookItem => item.id === bookId && isBookItem(item),
         );
 
         if (!book) {
+          return currentState;
+        }
+        if (openedBook?.id !== bookId || book.title !== openedBook.title || book.note !== openedBook.note) {
+          conflict = true;
           return currentState;
         }
 
@@ -2910,7 +2940,13 @@ export const LibraryGrid = () => {
               : currentState.activeFocusSession,
         };
       });
+      if (conflict) {
+        setStorageNotice("Bu kitap başka bir sekmede değişti. Taslağın korunuyor; güncel notu kontrol et.");
+        return false;
+      }
+      if (!saved.archivedBooks?.some((book) => book.id === bookId && book.title === data.title && (book.note ?? "") === data.note)) return false;
       setSelectedNoteBookId(null);
+      return true;
     },
     [setLibraryState],
   );

@@ -187,6 +187,10 @@ export const doesItemFit = (
   size: GridSize,
   metrics: Pick<GridMetrics, "columnCount" | "rowCount">,
 ): boolean =>
+  [position.col, position.row, size.widthUnits, size.heightUnits,
+    metrics.columnCount, metrics.rowCount].every(Number.isFinite) &&
+  size.widthUnits > 0 && size.heightUnits > 0 &&
+  metrics.columnCount > 0 && metrics.rowCount > 0 &&
   position.col >= 0 &&
   position.row >= 0 &&
   position.col + size.widthUnits <= metrics.columnCount &&

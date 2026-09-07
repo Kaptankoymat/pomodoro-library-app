@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { parseLibraryBackup, readLibraryState } from "@/lib/libraryBackup";
 
 const DATABASE_NAME = "pomodoro-library";
 const DATABASE_VERSION = 1;
@@ -36,6 +37,7 @@ const openDatabase = (): Promise<IDBDatabase> => {
 
   const nextDatabasePromise = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+    let blocked = false;
 
     request.onupgradeneeded = () => {
       const database = request.result;
@@ -43,7 +45,23 @@ const openDatabase = (): Promise<IDBDatabase> => {
         database.createObjectStore(STORE_NAME, { keyPath: "key" });
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const database = request.result;
+      if (blocked) {
+        database.close();
+        return;
+      }
+      database.onversionchange = () => {
+        database.close();
+        databasePromise = null;
+      };
+      database.onclose = () => { databasePromise = null; };
+      resolve(database);
+    };
+    request.onblocked = () => {
+      blocked = true;
+      reject(new Error("Veri deposu başka bir sekmede açık. Diğer sekmeyi kapatıp tekrar dene."));
+    };
     request.onerror = () => reject(request.error ?? new Error("Yerel veri deposu açılamadı."));
   });
   databasePromise = nextDatabasePromise;
@@ -66,6 +84,8 @@ const readRecord = async <TValue,>(key: string): Promise<StoredRecord<TValue> | 
     request.onsuccess = () =>
       resolve((request.result as StoredRecord<TValue> | undefined) ?? null);
     request.onerror = () => reject(request.error ?? new Error("Yerel kayıt okunamadı."));
+    transaction.onabort = () => reject(transaction.error ?? new Error("Yerel kayıt okunamadı."));
+    transaction.onerror = () => reject(transaction.error ?? new Error("Yerel kayıt okunamadı."));
   });
 };
 
@@ -85,14 +105,19 @@ const writeRecord = async <TValue,>(
     request.onsuccess = () => {
       try {
         const currentRecord = request.result as StoredRecord<TValue> | undefined;
-        const currentValue = currentRecord?.value ?? fallbackValue;
-        const nextValue =
+        const currentValue = assertImportValue<TValue>(currentRecord?.value ?? fallbackValue);
+        const nextValue = assertImportValue<TValue>(
           typeof action === "function"
             ? (action as (current: TValue) => TValue)(currentValue)
-            : action;
+            : action,
+        );
+        if (currentRecord && nextValue === currentRecord.value) {
+          nextRecord = currentRecord;
+          return;
+        }
         nextRecord = {
           key,
-          revision: (currentRecord?.revision ?? 0) + 1,
+          revision: (Number.isSafeInteger(currentRecord?.revision) ? currentRecord!.revision : 0) + 1,
           updatedAt: Date.now(),
           value: nextValue,
         };
@@ -131,20 +156,7 @@ const notifyOtherTabs = (key: string, revision: number): void => {
 };
 
 const assertImportValue = <TValue,>(value: unknown): TValue => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Seçilen dosya geçerli bir Pomodoro Library yedeği değil.");
-  }
-
-  const candidate = value as Record<string, unknown>;
-  if (
-    !Array.isArray(candidate.shelves) ||
-    !Array.isArray(candidate.items) ||
-    !Array.isArray(candidate.tasks)
-  ) {
-    throw new Error("Yedekte raf, eşya veya görev verisi eksik.");
-  }
-
-  return value as TValue;
+  return readLibraryState(value) as TValue;
 };
 
 export const useLocalStorageState = <TValue,>(
@@ -156,6 +168,8 @@ export const useLocalStorageState = <TValue,>(
   const [isHydrated, setIsHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const readyRef = useRef(false);
+  const revisionRef = useRef(0);
+  const reloadRef = useRef<(() => Promise<boolean>) | null>(null);
   const recoveryRawValueRef = useRef<string | null>(null);
   const pendingActionRef = useRef<
     TValue | ((current: TValue) => TValue) | null
@@ -168,16 +182,26 @@ export const useLocalStorageState = <TValue,>(
 
   useEffect(() => {
     let cancelled = false;
-    const channel =
-      typeof BroadcastChannel === "undefined"
-        ? null
-        : new BroadcastChannel(SYNC_CHANNEL_NAME);
+    readyRef.current = false;
+    revisionRef.current = 0;
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        channel = new BroadcastChannel(SYNC_CHANNEL_NAME);
+      }
+    } catch {
+      // Storage still works in browsers that disallow cross-tab messaging.
+    }
 
     const load = async () => {
       let legacyRawValue: string | null = null;
 
       try {
         let record = await readRecord<TValue>(key);
+        if (record) {
+          recoveryRawValueRef.current = JSON.stringify({ app: "pomodoro-library", version: 1, data: record.value });
+          record = { ...record, value: assertImportValue<TValue>(record.value) };
+        }
 
         if (!record) {
           legacyRawValue = window.localStorage.getItem(key);
@@ -185,35 +209,43 @@ export const useLocalStorageState = <TValue,>(
 
           if (legacyRawValue) {
             const backupKey = `${key}:legacy-backup`;
-            if (!window.localStorage.getItem(backupKey)) {
-              window.localStorage.setItem(backupKey, legacyRawValue);
-            }
             migratedValue = assertImportValue<TValue>(JSON.parse(legacyRawValue));
+            try {
+              if (!window.localStorage.getItem(backupKey)) {
+                window.localStorage.setItem(backupKey, legacyRawValue);
+              }
+            } catch {
+              // The original legacy key remains intact if backup space is full.
+            }
           }
 
-          record = await writeRecord(key, migratedValue, initialValue);
+          record = await writeRecord(key, (current) => current, migratedValue);
         }
 
         if (!cancelled) {
           valueRef.current = record.value;
+          revisionRef.current = record.revision;
           readyRef.current = true;
           recoveryRawValueRef.current = null;
           setValue(record.value);
           setError(null);
         }
+        return !cancelled;
       } catch (loadError) {
         if (!cancelled) {
-          recoveryRawValueRef.current = legacyRawValue;
+          if (legacyRawValue) recoveryRawValueRef.current = legacyRawValue;
           setError(
             `Kayıt açılamadı: ${getErrorMessage(loadError)} Mevcut veri değiştirilmedi.`,
           );
         }
+        return false;
       } finally {
         if (!cancelled) {
           setIsHydrated(true);
         }
       }
     };
+    reloadRef.current = load;
 
     if (channel) {
       channel.onmessage = async (event: MessageEvent<{ key?: string }>) => {
@@ -223,9 +255,11 @@ export const useLocalStorageState = <TValue,>(
 
         try {
           const record = await readRecord<TValue>(key);
-          if (record && !cancelled) {
-            valueRef.current = record.value;
-            setValue(record.value);
+          if (record && !cancelled && record.revision > revisionRef.current) {
+            const syncedValue = assertImportValue<TValue>(record.value);
+            revisionRef.current = record.revision;
+            valueRef.current = syncedValue;
+            setValue(syncedValue);
           }
         } catch (syncError) {
           if (!cancelled) {
@@ -241,6 +275,7 @@ export const useLocalStorageState = <TValue,>(
 
     return () => {
       cancelled = true;
+      reloadRef.current = null;
       channel?.close();
     };
   }, [initialValue, key]);
@@ -266,8 +301,11 @@ export const useLocalStorageState = <TValue,>(
           },
           valueRef.current,
         );
-        valueRef.current = record.value;
-        setValue(record.value);
+        if (record.revision >= revisionRef.current) {
+          revisionRef.current = record.revision;
+          valueRef.current = record.value;
+          setValue(record.value);
+        }
         setError(null);
         pendingActionRef.current = null;
         pendingValueRef.current = null;
@@ -308,18 +346,15 @@ export const useLocalStorageState = <TValue,>(
 
   const importData = useCallback(
     async (rawValue: string) => {
-      const parsed = JSON.parse(rawValue) as { app?: string; data?: unknown };
-      if (parsed.app !== "pomodoro-library" || !("data" in parsed)) {
-        throw new Error("Seçilen dosya geçerli bir Pomodoro Library yedeği değil.");
-      }
-
-      const importedValue = assertImportValue<TValue>(parsed.data);
+      const importedValue = parseLibraryBackup(rawValue) as TValue;
       window.localStorage.setItem(
         `${key}:pre-import-backup:${Date.now()}`,
         JSON.stringify(valueRef.current),
       );
       const record = await writeRecord(key, importedValue, valueRef.current);
       readyRef.current = true;
+      revisionRef.current = record.revision;
+      recoveryRawValueRef.current = null;
       valueRef.current = record.value;
       setValue(record.value);
       setError(null);
@@ -332,8 +367,9 @@ export const useLocalStorageState = <TValue,>(
   );
 
   const retryLastSave = useCallback(async () => {
+    if (!readyRef.current) return await reloadRef.current?.() ?? false;
     const action = pendingActionRef.current;
-    if (!action) {
+    if (action === null) {
       setError(null);
       return true;
     }
@@ -343,6 +379,7 @@ export const useLocalStorageState = <TValue,>(
       pendingActionRef.current = null;
       pendingValueRef.current = null;
       valueRef.current = record.value;
+      revisionRef.current = record.revision;
       setValue(record.value);
       setError(null);
       notifyOtherTabs(key, record.revision);

@@ -1,6 +1,8 @@
-import { resolveResizeLayout, validateGridLayout } from "@/lib/gridLogic";
+import { canPlaceItem, findNearestValidSlot, validateGridLayout } from "@/lib/gridLogic";
+import { normalizeFocusSession } from "@/lib/focusSession";
 import {
   DEFAULT_SHELF_ROWS,
+  createShelfWithTimer,
   ensureShelfTimers,
   GRID_COLUMN_COUNT,
   LIBRARY_SCHEMA_VERSION,
@@ -31,25 +33,11 @@ const getShelfMetrics = () => ({
   rowCount: DEFAULT_SHELF_ROWS,
 });
 
-const haveGridPositionsChanged = (
-  currentItems: LibraryItem[],
-  nextItems: LibraryItem[],
-): boolean => {
-  if (currentItems.length !== nextItems.length) {
-    return true;
-  }
-
-  const currentById = new Map(currentItems.map((item) => [item.id, item] as const));
-
-  return nextItems.some((nextItem) => {
-    const currentItem = currentById.get(nextItem.id);
-
-    return (
-      !currentItem ||
-      currentItem.row !== nextItem.row ||
-      currentItem.col !== nextItem.col
-    );
-  });
+const haveSameFields = (left: object, right: object): boolean => {
+  const leftFields = left as Record<string, unknown>;
+  const rightFields = right as Record<string, unknown>;
+  return Array.from(new Set([...Object.keys(left), ...Object.keys(right)]))
+    .every((key) => Object.is(leftFields[key], rightFields[key]));
 };
 
 const scaleShelfColumns = (
@@ -87,7 +75,6 @@ export const normalizeLibraryStateForRuntime = (
   state: LibraryState,
   now = Date.now(),
 ): LibraryState => {
-  let changed = false;
   let shelvesChanged = false;
   const normalizedShelves = state.shelves.map((shelf) => {
     if (shelf.rowCount === DEFAULT_SHELF_ROWS) {
@@ -100,7 +87,7 @@ export const normalizeLibraryStateForRuntime = (
       rowCount: DEFAULT_SHELF_ROWS,
     };
   });
-  const shelves = shelvesChanged ? normalizedShelves : state.shelves;
+  let shelves = shelvesChanged ? normalizedShelves : state.shelves;
 
   const itemsWithTimers = ensureShelfTimers(shelves, state.items);
   const slotScaledItems =
@@ -150,6 +137,7 @@ export const normalizeLibraryStateForRuntime = (
   });
   items = itemMetadataChanged ? metadataNormalizedItems : itemsBeforeMetadata;
 
+  const overflowItems: LibraryItem[] = [];
   for (const shelf of shelves) {
     const shelfItems = items.filter(
       (item) => item.shelfId === shelf.id && isShelfPlacedItem(item),
@@ -160,10 +148,16 @@ export const normalizeLibraryStateForRuntime = (
       continue;
     }
 
-    const repairedItems = resolveResizeLayout(shelfItems, getShelfMetrics());
-
-    if (!haveGridPositionsChanged(shelfItems, repairedItems)) {
-      continue;
+    const repairedItems: LibraryItem[] = [];
+    for (const item of shelfItems) {
+      const position = canPlaceItem(item, repairedItems, getShelfMetrics()).valid
+        ? { row: item.row, col: item.col }
+        : findNearestValidSlot(item, item, repairedItems, getShelfMetrics());
+      if (position) {
+        repairedItems.push({ ...item, ...position });
+      } else {
+        overflowItems.push(item);
+      }
     }
 
     const repairedItemsById = new Map(
@@ -171,7 +165,50 @@ export const normalizeLibraryStateForRuntime = (
     );
 
     items = items.map((item) => repairedItemsById.get(item.id) ?? item);
-    changed = true;
+  }
+
+  // A larger costume, growing task note, or legacy timer can fill a shelf.
+  // Keep every item reachable by moving overflow onto additional shelves.
+  let overflowShelf: ReturnType<typeof createShelfWithTimer> | undefined;
+  const movedItems = new Map<string, LibraryItem>();
+  const createdTimers: LibraryItem[] = [];
+  for (const item of overflowItems) {
+    let position = overflowShelf
+      ? findNearestValidSlot(
+          { row: 0, col: 0 }, item,
+          [overflowShelf.timer, ...movedItems.values()].filter(
+            (candidate) => candidate.shelfId === overflowShelf!.shelf.id,
+          ), getShelfMetrics(),
+        )
+      : null;
+    if (!position) {
+      let suffix = shelves.length + 1;
+      while (shelves.some((shelf) => shelf.id === `recovered-shelf-${suffix}`) ||
+        items.some((candidate) => candidate.id === `timer-recovered-shelf-${suffix}`)) {
+        suffix += 1;
+      }
+      overflowShelf = createShelfWithTimer({ id: `recovered-shelf-${suffix}`, index: shelves.length });
+      shelves = [...shelves, overflowShelf.shelf];
+      createdTimers.push(overflowShelf.timer);
+      position = findNearestValidSlot({ row: 0, col: 0 }, item, [overflowShelf.timer], getShelfMetrics());
+    }
+    if (position && overflowShelf) {
+      movedItems.set(item.id, { ...item, shelfId: overflowShelf.shelf.id, ...position });
+    }
+  }
+  if (movedItems.size > 0) {
+    items = [...items.map((item) => movedItems.get(item.id) ?? item), ...createdTimers];
+  }
+
+  // Intermediate design/costume passes may allocate identical objects. Reuse
+  // the final unchanged state so the migration effect cannot keep saving it.
+  const originalItemsById = new Map(state.items.map((item) => [item.id, item]));
+  items = items.map((item) => {
+    const original = originalItemsById.get(item.id);
+    return original && haveSameFields(original, item) ? original : item;
+  });
+  if (items.length === state.items.length && items.every((item, index) => item === state.items[index])) {
+    items = state.items;
   }
 
   const selectedFocusItem = state.selectedFocusItemId
@@ -200,31 +237,21 @@ export const normalizeLibraryStateForRuntime = (
     };
   });
   const tasks = tasksChanged ? normalizedTasks : state.tasks;
-  const activeFocusSession = state.activeFocusSession
-    ? state.activeFocusSession.status &&
-      typeof state.activeFocusSession.accumulatedSeconds === "number"
-      ? state.activeFocusSession
-      : {
-          ...state.activeFocusSession,
-          status: "paused" as const,
-          accumulatedSeconds: 0,
-          resumedAt: undefined,
-          needsRestart: true,
-        }
-    : null;
+  const normalizedSession = state.activeFocusSession
+    ? normalizeFocusSession(state.activeFocusSession) : null;
+  const activeFocusSession = normalizedSession && state.activeFocusSession &&
+    haveSameFields(normalizedSession, state.activeFocusSession)
+    ? state.activeFocusSession : normalizedSession;
   const focusSessions = state.focusSessions ?? [];
   const archivedBooks = state.archivedBooks ?? [];
 
-  changed =
-    changed ||
-    shelvesChanged ||
-    itemsWithTimers !== state.items ||
-    slotScaledItems !== state.items ||
-    designNormalizedItems !== slotScaledItems ||
-    costumeNormalized.items !== designNormalizedItems ||
-    items !== costumeNormalized.items ||
-    itemMetadataChanged ||
+  const activeShelfId = shelves.some((shelf) => shelf.id === state.activeShelfId)
+    ? state.activeShelfId : shelves[0]?.id ?? "";
+  const changed =
+    shelves !== state.shelves ||
+    items !== state.items ||
     tasksChanged ||
+    activeShelfId !== state.activeShelfId ||
     selectedFocusItemId !== state.selectedFocusItemId ||
     !areWardrobeStatesEqual(state.wardrobe, costumeNormalized.wardrobe) ||
     state.schemaVersion !== LIBRARY_SCHEMA_VERSION ||
@@ -244,6 +271,7 @@ export const normalizeLibraryStateForRuntime = (
     ...state,
     schemaVersion: LIBRARY_SCHEMA_VERSION,
     shelves,
+    activeShelfId,
     items,
     tasks,
     archivedBooks,

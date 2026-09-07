@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { LibraryDialog } from "@/components/LibraryDialog";
 import {
   BookOpen,
   Pause,
@@ -85,32 +85,15 @@ export const TimerControlDialog = ({
   const rewardMessage = getRewardMessage(rewardSummary);
   const [minutes = "25", seconds = "00"] = timerText.split(":");
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
   return (
-    <div
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#1f120b]/80 px-4 py-6 backdrop-blur-sm"
-      role="dialog"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
+    <LibraryDialog
+      aria-label="Odak saati"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#1f120b]/80 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-6"
+      dismissOnBackdrop
+      onClose={onClose}
     >
       <section
-        aria-label="Odak saati"
-        className="relative grid w-full max-w-xl gap-5 rounded-lg border-x-2 border-t-2 border-b-[4px] border-[#6a3b20] bg-[#8a5a35] p-5 shadow-[0_16px_32px_rgba(0,0,0,0.8),inset_0_2px_4px_rgba(255,255,255,0.1)] sm:p-6"
+        className="relative my-auto grid w-full max-w-xl shrink-0 gap-5 rounded-lg border-x-2 border-t-2 border-b-[4px] border-[#6a3b20] bg-[#8a5a35] p-4 shadow-[0_16px_32px_rgba(0,0,0,0.8),inset_0_2px_4px_rgba(255,255,255,0.1)] sm:p-6"
         style={{ backgroundImage: 'url(/lofi_shelf_wood.png)', backgroundSize: '100% 100%', backgroundBlendMode: 'luminosity' }}
       >
         <div className="flex items-start justify-between gap-4">
@@ -133,25 +116,25 @@ export const TimerControlDialog = ({
         </div>
 
         {recoveryMessage ? (
-          <p className="rounded-md border border-amber-300/45 bg-[#3a2114]/75 px-3 py-2 text-sm text-amber-50">
+          <p role="status" className="rounded-md border border-amber-300/45 bg-[#3a2114]/75 px-3 py-2 text-sm text-amber-50">
             {recoveryMessage}
           </p>
         ) : null}
 
         {/* Timer Box */}
         <div className="relative overflow-hidden rounded-md border border-[#6a3b20] bg-[#6f3f22]/50 p-3 sm:p-4 shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)]">
-          <div className="relative z-10 flex items-center justify-center gap-3">
-            <div className="flex h-24 sm:h-32 w-full flex-1 items-center justify-center rounded-[4px] border-[2px] border-[#140c08] bg-[#0c0704] shadow-[inset_0_2px_12px_rgba(0,0,0,0.9)]">
-              <span className="font-mono text-[clamp(4rem,15vw,6rem)] font-black tracking-widest text-amber-500 drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]">
+          <div aria-label={`Kalan süre: ${minutes} dakika ${seconds} saniye`} role="timer" className="relative z-10 flex items-center justify-center gap-1.5 sm:gap-3">
+            <div aria-hidden className="flex h-24 sm:h-32 min-w-0 flex-1 items-center justify-center rounded-[4px] border-[2px] border-[#140c08] bg-[#0c0704] shadow-[inset_0_2px_12px_rgba(0,0,0,0.9)]">
+              <span className="font-mono text-[clamp(2.75rem,13vw,6rem)] font-black tracking-wider text-amber-500 drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]">
                 {minutes}
               </span>
             </div>
-            <div className="flex h-24 sm:h-32 flex-col items-center justify-center gap-4 px-2">
+            <div aria-hidden className="flex h-24 sm:h-32 flex-col items-center justify-center gap-4 px-1 sm:px-2">
               <span className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]" />
               <span className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]" />
             </div>
-            <div className="flex h-24 sm:h-32 w-full flex-1 items-center justify-center rounded-[4px] border-[2px] border-[#140c08] bg-[#0c0704] shadow-[inset_0_2px_12px_rgba(0,0,0,0.9)]">
-              <span className="font-mono text-[clamp(4rem,15vw,6rem)] font-black tracking-widest text-amber-500 drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]">
+            <div aria-hidden className="flex h-24 sm:h-32 min-w-0 flex-1 items-center justify-center rounded-[4px] border-[2px] border-[#140c08] bg-[#0c0704] shadow-[inset_0_2px_12px_rgba(0,0,0,0.9)]">
+              <span className="font-mono text-[clamp(2.75rem,13vw,6rem)] font-black tracking-wider text-amber-500 drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]">
                 {seconds}
               </span>
             </div>
@@ -250,19 +233,19 @@ export const TimerControlDialog = ({
 
         {rewardMessage ? (
           <button
-            aria-label="Odak odulunu kapat"
+            aria-label="Odak ödülünü kapat"
             className="rounded-md border-2 border-[#6a3b20] bg-[#8a5a35] px-4 py-3 text-left text-sm font-bold tracking-wider text-amber-50 shadow-[0_8px_16px_rgba(0,0,0,0.6)] transition hover:bg-[#6f3f22]"
             type="button"
             onClick={onClearReward}
             style={{ backgroundImage: 'url(/lofi_shelf_wood.png)', backgroundSize: '100% 100%', backgroundBlendMode: 'luminosity' }}
           >
-            <div className="flex items-center gap-2">
+            <span role="status" className="flex items-center gap-2">
               <Sparkles aria-hidden className="h-4 w-4 text-amber-400" />
               {rewardMessage}
-            </div>
+            </span>
           </button>
         ) : null}
       </section>
-    </div>
+    </LibraryDialog>
   );
 };

@@ -19,14 +19,23 @@ export const completeNaturalFocusSession = (params: {
 
   if (
     !session ||
-    session.id !== params.sessionId ||
-    (params.state.focusSessions ?? []).some((record) => record.id === params.sessionId) ||
-    getFocusElapsedSeconds(session, params.completedAt) < session.durationSeconds
+    session.id !== params.sessionId
   ) {
     return { state: params.state, summary: null };
   }
 
-  const completedAt = getFocusCompletionTimestamp(session) ?? params.completedAt;
+  if ((params.state.focusSessions ?? []).some((record) => record.id === session.id)) {
+    return { state: { ...params.state, activeFocusSession: null }, summary: null };
+  }
+
+  const completedAt = getFocusCompletionTimestamp(session);
+  if (
+    completedAt === null ||
+    !Number.isFinite(params.completedAt) ||
+    params.completedAt < completedAt
+  ) {
+    return { state: params.state, summary: null };
+  }
 
   const result = completeFocusSession(
     params.state,
@@ -62,13 +71,22 @@ export const endFocusSessionEarly = (
   completedAt: number,
 ): LibraryState => {
   const session = state.activeFocusSession;
-  if (!session || (state.focusSessions ?? []).some((record) => record.id === session.id)) {
+  if (!session || !Number.isFinite(completedAt)) {
     return state;
+  }
+
+  if ((state.focusSessions ?? []).some((record) => record.id === session.id)) {
+    return { ...state, activeFocusSession: null };
+  }
+
+  const naturalCompletionAt = getFocusCompletionTimestamp(session);
+  if (naturalCompletionAt !== null && completedAt >= naturalCompletionAt) {
+    return completeNaturalFocusSession({ state, sessionId: session.id, completedAt }).state;
   }
 
   const elapsedSeconds = Math.floor(getFocusElapsedSeconds(session, completedAt));
   if (elapsedSeconds <= 0) {
-    return state;
+    return { ...state, activeFocusSession: null };
   }
 
   const items = session.targetBookId

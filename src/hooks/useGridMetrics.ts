@@ -12,6 +12,7 @@ type UseGridMetricsOptions = {
   gap?: number;
   measurementEpsilon?: number;
   resizeSettleMs?: number;
+  fitToHeight?: boolean;
 };
 
 type UseGridMetricsResult<TElement extends HTMLElement> = {
@@ -32,6 +33,7 @@ export const useGridMetrics = <TElement extends HTMLElement>(
     gap = 8,
     measurementEpsilon = 2.5,
     resizeSettleMs = 140,
+    fitToHeight = true,
   } = options;
 
   const containerRef = useRef<TElement | null>(null);
@@ -49,16 +51,30 @@ export const useGridMetrics = <TElement extends HTMLElement>(
     }
 
     let settleTimeout: ReturnType<typeof setTimeout> | undefined;
+    let lastMeasurement: { width: number; height: number } | null = null;
 
     const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
       const nextWidth = Math.round(entry.contentRect.width);
       const nextHeight = Math.round(entry.contentRect.height);
+
+      // Hidden containers briefly report zero dimensions. Keep the last useful
+      // layout until they are visible again instead of collapsing every item.
+      if (nextWidth <= 0 || (fitToHeight && nextHeight <= 0)) return;
+      if (
+        lastMeasurement &&
+        Math.abs(lastMeasurement.width - nextWidth) < measurementEpsilon &&
+        (!fitToHeight || Math.abs(lastMeasurement.height - nextHeight) < measurementEpsilon)
+      ) {
+        return;
+      }
+      lastMeasurement = { width: nextWidth, height: nextHeight };
 
       setIsResizing(true);
       setContainerSize((currentSize) => {
         const widthChanged =
           Math.abs(currentSize.width - nextWidth) >= measurementEpsilon;
-        const heightChanged =
+        const heightChanged = fitToHeight &&
           Math.abs(currentSize.height - nextHeight) >= measurementEpsilon;
 
         return widthChanged || heightChanged
@@ -87,13 +103,13 @@ export const useGridMetrics = <TElement extends HTMLElement>(
         clearTimeout(settleTimeout);
       }
     };
-  }, [measurementEpsilon, resizeSettleMs]);
+  }, [fitToHeight, measurementEpsilon, resizeSettleMs]);
 
   const metrics = useMemo(
     () =>
       createGridMetrics({
         containerWidth: containerSize.width,
-        containerHeight: containerSize.height,
+        containerHeight: fitToHeight ? containerSize.height : undefined,
         columnCount,
         rowCount,
         minCellWidth,
@@ -107,6 +123,7 @@ export const useGridMetrics = <TElement extends HTMLElement>(
       containerSize.height,
       containerSize.width,
       gap,
+      fitToHeight,
       maxCellWidth,
       minCellWidth,
       rowCount,

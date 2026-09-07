@@ -10,7 +10,7 @@ import type { ActiveFocusSession } from "@/types/library";
 type UsePomodoroTimerParams = {
   durationSeconds: number;
   session: ActiveFocusSession | null | undefined;
-  onComplete: (sessionId: string) => void;
+  onComplete: (sessionId: string) => void | boolean | Promise<void | boolean>;
 };
 
 export const usePomodoroTimer = ({
@@ -34,37 +34,64 @@ export const usePomodoroTimer = ({
     }
 
     const refreshNow = () => {
-      setNow((currentNow) => Math.max(currentNow + 1, Date.now()));
+      const nextNow = Date.now();
+      setNow((currentNow) =>
+        getFocusRemainingSeconds(session, durationSeconds, currentNow) ===
+        getFocusRemainingSeconds(session, durationSeconds, nextNow)
+          ? currentNow
+          : nextNow,
+      );
     };
     const intervalId = window.setInterval(refreshNow, 250);
     document.addEventListener("visibilitychange", refreshNow);
+    window.addEventListener("focus", refreshNow);
 
     return () => {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", refreshNow);
+      window.removeEventListener("focus", refreshNow);
     };
-  }, [isRunning, session?.id]);
+  }, [durationSeconds, isRunning, session]);
 
   const remainingSeconds = getFocusRemainingSeconds(session, durationSeconds, now);
+  const sessionId = session?.id;
 
   useEffect(() => {
-    if (!session || !isRunning || remainingSeconds > 0) {
+    if (!sessionId || !isRunning || remainingSeconds > 0) {
       return;
     }
 
-    if (completionRequestedRef.current === session.id) {
+    if (completionRequestedRef.current === sessionId) {
       return;
     }
 
-    completionRequestedRef.current = session.id;
-    completeRef.current(session.id);
-  }, [isRunning, remainingSeconds, session]);
+    let cancelled = false;
+    let retryTimeoutId: number | undefined;
+    const requestCompletion = async () => {
+      completionRequestedRef.current = sessionId;
+      try {
+        const completed = await completeRef.current(sessionId);
+        if (completed !== false) {
+          return;
+        }
+      } catch {
+        // Persistence reports the error; retry without losing the completed session.
+      }
 
-  useEffect(() => {
-    if (!session || session.id !== completionRequestedRef.current) {
-      completionRequestedRef.current = null;
-    }
-  }, [session]);
+      if (!cancelled) {
+        retryTimeoutId = window.setTimeout(() => void requestCompletion(), 1_000);
+      }
+    };
+    void requestCompletion();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(retryTimeoutId);
+      if (completionRequestedRef.current === sessionId) {
+        completionRequestedRef.current = null;
+      }
+    };
+  }, [isRunning, remainingSeconds, sessionId]);
 
   return {
     remainingSeconds,

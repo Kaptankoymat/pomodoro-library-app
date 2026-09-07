@@ -322,23 +322,30 @@ export const createInitialWardrobeState = (): LibraryWardrobeState => ({
 
 const mergeIds = (ids: CostumeId[]): CostumeId[] => Array.from(new Set(ids));
 
+const knownCostumeIds = (ids: unknown): CostumeId[] =>
+  Array.isArray(ids)
+    ? ids.filter((id): id is CostumeId => typeof id === "string" && COSTUME_BY_ID.has(id as CostumeId))
+    : [];
+
 export const normalizeWardrobeState = (
   wardrobe: LibraryWardrobeState | undefined,
 ): LibraryWardrobeState => {
   const initialWardrobe = createInitialWardrobeState();
+  const defaultCostumeByKind = { ...DEFAULT_COSTUME_BY_KIND };
+  for (const kind of Object.keys(defaultCostumeByKind) as LibraryItemKind[]) {
+    const costume = getCostumeDefinition(wardrobe?.defaultCostumeByKind?.[kind]);
+    if (costume?.kind === kind) defaultCostumeByKind[kind] = costume.id;
+  }
 
   return {
-    defaultCostumeByKind: {
-      ...DEFAULT_COSTUME_BY_KIND,
-      ...(wardrobe?.defaultCostumeByKind ?? {}),
-    },
-    revealedSecretCostumeIds: mergeIds([
-      ...(wardrobe?.revealedSecretCostumeIds ?? []),
-    ]),
-    tokens: wardrobe?.tokens ?? 0,
+    defaultCostumeByKind,
+    revealedSecretCostumeIds: mergeIds(knownCostumeIds(wardrobe?.revealedSecretCostumeIds)),
+    tokens: typeof wardrobe?.tokens === "number" && Number.isFinite(wardrobe.tokens)
+      ? Math.max(0, Math.floor(wardrobe.tokens)) : 0,
     unlockedCostumeIds: mergeIds([
       ...initialWardrobe.unlockedCostumeIds,
-      ...(wardrobe?.unlockedCostumeIds ?? []),
+      ...knownCostumeIds(wardrobe?.unlockedCostumeIds),
+      ...Object.values(defaultCostumeByKind),
     ]),
   };
 };
@@ -352,6 +359,8 @@ export const areWardrobeStatesEqual = (
   }
 
   return (
+    Array.isArray(left.revealedSecretCostumeIds) &&
+    Array.isArray(left.unlockedCostumeIds) &&
     left.tokens === right.tokens &&
     JSON.stringify(left.defaultCostumeByKind) ===
       JSON.stringify(right.defaultCostumeByKind) &&
@@ -395,11 +404,11 @@ export const normalizeItemsForCostumes = (
       wardrobe,
     );
 
-    if (legacyUnlockedSkins) {
+    if (Array.isArray(legacyUnlockedSkins)) {
       for (const skin of legacyUnlockedSkins) {
         const costumeId = legacyBookSkinCostumeMap[skin];
 
-        unlockedCostumeIds.add(costumeId);
+        if (costumeId) unlockedCostumeIds.add(costumeId);
 
         if (getCostumeDefinition(costumeId)?.visibility === "secret") {
           revealedSecretCostumeIds.add(costumeId);
@@ -410,6 +419,7 @@ export const normalizeItemsForCostumes = (
     if (resolvedCostume?.visibility === "secret") {
       revealedSecretCostumeIds.add(resolvedCostume.id);
     }
+    if (resolvedCostume?.kind === item.kind) unlockedCostumeIds.add(resolvedCostume.id);
 
     const normalizedItem = {
       ...item,

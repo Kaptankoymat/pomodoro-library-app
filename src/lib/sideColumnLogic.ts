@@ -1,7 +1,10 @@
+import { canPlaceItem, type GridMetrics } from "@/lib/gridLogic";
+import { getStickyTaskGridSize } from "@/lib/stickyTaskLayout";
 import type {
   DecorItem,
   LibraryItem,
   SideColumnPlacement,
+  LibraryTask,
 } from "@/types/library";
 
 export type SideColumnTarget = {
@@ -27,7 +30,7 @@ export type SideColumnDropResolution<TItem extends LibraryItem = LibraryItem> =
       type: "snap-back";
       items: TItem[];
       movedItemId: string;
-      reason: "missing-item" | "unsupported-item" | "out-of-bounds";
+      reason: "missing-item" | "unsupported-item" | "out-of-bounds" | "blocked";
     };
 
 export const isSideColumnPlacement = (
@@ -267,6 +270,10 @@ export const resolveSideColumnDrop = <TItem extends LibraryItem>(
   target: SideColumnTarget,
   items: TItem[],
   slotCount: number,
+  options?: {
+    metrics: Pick<GridMetrics, "columnCount" | "rowCount">;
+    tasks: LibraryTask[];
+  },
 ): SideColumnDropResolution<TItem> => {
   const draggedItem = items.find((item) => item.id === itemId);
 
@@ -288,7 +295,7 @@ export const resolveSideColumnDrop = <TItem extends LibraryItem>(
     };
   }
 
-  if (!isValidSideSlot(target.sideSlot, slotCount)) {
+  if (!isSideColumnPlacement(target.placement) || !isValidSideSlot(target.sideSlot, slotCount)) {
     return {
       type: "snap-back",
       items,
@@ -327,6 +334,24 @@ export const resolveSideColumnDrop = <TItem extends LibraryItem>(
     };
   }
 
+  const swappedShelfItem = {
+    ...targetOccupant,
+    ...(targetOccupant.kind === "sticky" && options
+      ? getStickyTaskGridSize(options.tasks) : {}),
+    placement: "shelf" as const,
+    sideSlot: undefined,
+    row: draggedItem.row,
+    col: draggedItem.col,
+  };
+  if (!previousSideTarget && (!options || !canPlaceItem(
+    swappedShelfItem,
+    items.filter((item) => item.shelfId === draggedItem.shelfId &&
+      item.id !== draggedItem.id && item.id !== targetOccupant.id && isShelfPlacedItem(item)),
+    options.metrics,
+  ).valid)) {
+    return { type: "snap-back", items, movedItemId: itemId, reason: "blocked" };
+  }
+
   return {
     type: "swap",
     movedItemId: itemId,
@@ -353,13 +378,7 @@ export const resolveSideColumnDrop = <TItem extends LibraryItem>(
         } as TItem;
       }
 
-      return {
-        ...item,
-        placement: "shelf",
-        sideSlot: undefined,
-        row: draggedItem.row,
-        col: draggedItem.col,
-      } as TItem;
+      return swappedShelfItem as TItem;
     }),
   };
 };

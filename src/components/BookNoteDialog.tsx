@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Archive, BookOpen, Clock, Save, Timer, X } from "lucide-react";
+import { LibraryDialog } from "@/components/LibraryDialog";
 import {
   formatFocusDuration,
   formatRelativeStudyDate,
   type BookStudyStats,
 } from "@/lib/libraryStats";
 import { libraryTheme } from "@/lib/libraryTheme";
+import { getXpIntoLevel, XP_PER_LEVEL } from "@/lib/libraryProgression";
 
 export type EditableBook = {
   id: string;
@@ -23,8 +25,8 @@ type BookNoteDialogProps = {
   book: EditableBook;
   stats: BookStudyStats;
   onClose: () => void;
-  onArchive: (bookId: string, data: { title: string; note: string }) => void;
-  onSave: (bookId: string, data: { title: string; note: string }) => void;
+  onArchive: (bookId: string, data: { title: string; note: string }) => Promise<boolean>;
+  onSave: (bookId: string, data: { title: string; note: string }) => Promise<boolean>;
 };
 
 export const BookNoteDialog = ({
@@ -38,61 +40,99 @@ export const BookNoteDialog = ({
   const noteInputId = useId();
   const [draftTitle, setDraftTitle] = useState(book.title);
   const [draftNote, setDraftNote] = useState(book.note ?? "");
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"save" | "archive" | null>(null);
+  const [saveError, setSaveError] = useState("");
+  const cancelDiscardRef = useRef<HTMLButtonElement>(null);
+  const isDirty = draftTitle !== book.title || draftNote !== (book.note ?? "");
+  const bookXp = getXpIntoLevel(book.xp);
+
+  const requestClose = () => {
+    if (pendingAction) return;
+    if (isDirty) {
+      setConfirmDiscard(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const saveDraft = async (action: "save" | "archive") => {
+    if (pendingAction) return;
+    setPendingAction(action);
+    setSaveError("");
+    try {
+      const saved = await (action === "archive" ? onArchive : onSave)(book.id, {
+        title: draftTitle.trim() || "İsimsiz kitap",
+        note: draftNote.trim(),
+      });
+      if (!saved) {
+        setSaveError("Kaydedilemedi. Notların burada korunuyor; yeniden deneyebilirsin.");
+      }
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Not kaydedilemedi. Yeniden deneyebilirsin.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
+    if (!isDirty) return;
+    const preventUnsavedNavigation = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
     };
+    window.addEventListener("beforeunload", preventUnsavedNavigation);
+    return () => window.removeEventListener("beforeunload", preventUnsavedNavigation);
+  }, [isDirty]);
 
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [onClose]);
+  useEffect(() => {
+    if (confirmDiscard) cancelDiscardRef.current?.focus();
+  }, [confirmDiscard]);
 
   const noteUpdatedText = book.noteUpdatedAt
     ? formatRelativeStudyDate(book.noteUpdatedAt)
-    : "Not henuz kaydedilmedi";
+    : "Not henüz kaydedilmedi";
 
   return (
-    <div
-      aria-labelledby={titleInputId}
-      aria-modal="true"
+    <LibraryDialog
+      aria-label={`${book.title} çalışma defteri`}
       className="fixed inset-0 z-[80] overflow-y-auto bg-[#140f0b]/88 px-3 py-3 backdrop-blur-md sm:px-5 sm:py-5"
-      role="dialog"
+      onClose={confirmDiscard ? () => setConfirmDiscard(false) : requestClose}
     >
       <form
         className={`mx-auto grid min-h-[calc(100dvh-1.5rem)] w-full max-w-6xl grid-rows-[auto_1fr_auto] rounded-md border shadow-2xl shadow-black/45 sm:min-h-[calc(100dvh-2.5rem)] ${libraryTheme.current.panel}`}
+        aria-busy={pendingAction !== null}
+        onKeyDown={(event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            void saveDraft("save");
+          }
+        }}
         onSubmit={(event) => {
           event.preventDefault();
-          onSave(book.id, {
-            title: draftTitle.trim() || "Untitled Book",
-            note: draftNote.trim(),
-          });
+          void saveDraft("save");
         }}
       >
         <header className="flex flex-col gap-4 border-b border-[#bba88c] px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#8a6040]">
               <BookOpen aria-hidden className="h-4 w-4" />
-              Calisma defteri
+              Çalışma defteri
             </div>
             <label className="block" htmlFor={titleInputId}>
-              <span className="sr-only">Kitap adi</span>
+              <span className="sr-only">Kitap adı</span>
               <input
                 id={titleInputId}
                 className="w-full border-0 bg-transparent p-0 text-3xl font-bold leading-tight text-[#2f251b] outline-none placeholder:text-[#8b7965] sm:text-5xl"
                 maxLength={64}
+                disabled={pendingAction !== null}
+                placeholder="Kitap adı"
                 type="text"
                 value={draftTitle}
                 onChange={(event) => setDraftTitle(event.target.value)}
               />
             </label>
             <p className="mt-2 text-sm text-[#6e5c47]">
-              Tek ana not alani. Konu, proje veya okuma izlerini burada tut.
+              Konu, proje veya okuma notlarını burada tut.
             </p>
           </div>
 
@@ -101,7 +141,8 @@ export const BookNoteDialog = ({
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] ${libraryTheme.current.secondaryButton} ${libraryTheme.current.focusRing}`}
             title="Kapat"
             type="button"
-            onClick={onClose}
+            disabled={pendingAction !== null}
+            onClick={requestClose}
           >
             <X aria-hidden className="h-5 w-5" />
           </button>
@@ -111,16 +152,16 @@ export const BookNoteDialog = ({
           <aside className="grid content-start gap-3">
             <div className="rounded-md border border-[#bba88c] bg-[#efe3d0] p-4">
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-[#6e5c47]">Level</span>
+                <span className="text-[#6e5c47]">Seviye</span>
                 <span className="font-bold text-[#2f251b]">Lv {book.level}</span>
               </div>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#d2c0a1]">
                 <div
                   className="h-full rounded-full bg-[#8a6040]"
-                  style={{ width: `${book.xp % 100}%` }}
+                  style={{ width: `${(bookXp / XP_PER_LEVEL) * 100}%` }}
                 />
               </div>
-              <div className="mt-2 text-xs text-[#6e5c47]">{book.xp % 100}/100 XP</div>
+              <div className="mt-2 text-xs text-[#6e5c47]">{bookXp}/{XP_PER_LEVEL} XP</div>
             </div>
 
             <div className="grid gap-2 rounded-md border border-[#bba88c] bg-[#efe3d0] p-4 text-sm text-[#4a3b2c]">
@@ -145,7 +186,7 @@ export const BookNoteDialog = ({
             </div>
 
             <div className="rounded-md border border-[#bba88c] bg-[#efe3d0] p-4 text-sm text-[#6e5c47]">
-              <div className="font-semibold text-[#2f251b]">Son calisma</div>
+              <div className="font-semibold text-[#2f251b]">Son çalışma</div>
               <div className="mt-1">
                 {formatRelativeStudyDate(stats.lastStudiedAt ?? book.lastStudiedAt)}
               </div>
@@ -159,44 +200,72 @@ export const BookNoteDialog = ({
             <textarea
               id={noteInputId}
               className="min-h-[52dvh] resize-none rounded-md border border-[#bba88c] bg-[#fffaf1] px-4 py-4 text-base leading-8 text-[#2f251b] outline-none transition placeholder:text-[#9c8975] focus:border-[#8a6040] lg:min-h-full"
-              placeholder="Bu kitap/proje icin calisma notlarini yaz..."
+              disabled={pendingAction !== null}
+              placeholder="Bu kitap veya proje için çalışma notlarını yaz..."
               value={draftNote}
               onChange={(event) => setDraftNote(event.target.value)}
             />
           </label>
         </main>
 
-        <footer className="flex flex-col-reverse gap-2 border-t border-[#bba88c] px-4 py-4 sm:flex-row sm:justify-end sm:px-6">
+        <footer className="border-t border-[#bba88c] px-4 py-4 sm:px-6">
+          {saveError ? (
+            <p role="alert" className="mb-3 rounded-md border border-[#d69b87] bg-[#f9e1d8] p-3 text-sm text-[#6a3727]">{saveError}</p>
+          ) : null}
+          {confirmDiscard ? (
+            <div role="alert" className="mb-3 rounded-md border border-[#d69b87] bg-[#f9e1d8] p-3 text-sm text-[#6a3727]">
+              <p>Kaydedilmemiş değişikliklerin var. Kaydetmeden kapatmak istiyor musun?</p>
+              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <button
+                  ref={cancelDiscardRef}
+                  className={`min-h-10 rounded-[4px] px-3 font-semibold ${libraryTheme.current.secondaryButton} ${libraryTheme.current.focusRing}`}
+                  disabled={pendingAction !== null}
+                  type="button"
+                  onClick={() => setConfirmDiscard(false)}
+                >
+                  Düzenlemeye devam et
+                </button>
+                <button
+                  className={`min-h-10 rounded-[4px] bg-[#a3482d] px-3 font-semibold text-white hover:bg-[#883a24] ${libraryTheme.current.focusRing}`}
+                  disabled={pendingAction !== null}
+                  type="button"
+                  onClick={onClose}
+                >
+                  Kaydetmeden kapat
+                </button>
+              </div>
+            </div>
+          ) : null}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             className={`flex h-11 items-center justify-center gap-2 rounded-[4px] px-4 text-sm font-semibold ${libraryTheme.current.secondaryButton} ${libraryTheme.current.focusRing}`}
             type="button"
-            onClick={onClose}
+            disabled={pendingAction !== null}
+            onClick={requestClose}
           >
             <X aria-hidden className="h-4 w-4" />
-            Vazgec
+            Vazgeç
           </button>
           <button
             className="flex h-11 items-center justify-center gap-2 rounded-[4px] border border-[#9b704d] bg-[#efe3d0] px-4 text-sm font-semibold text-[#5a3b25] transition hover:bg-[#e5d2b3]"
             type="button"
-            onClick={() =>
-              onArchive(book.id, {
-                title: draftTitle.trim() || "Untitled Book",
-                note: draftNote.trim(),
-              })
-            }
+            disabled={pendingAction !== null}
+            onClick={() => void saveDraft("archive")}
           >
             <Archive aria-hidden className="h-4 w-4" />
-            Kaydet ve Depoya Kaldır
+            {pendingAction === "archive" ? "Kaydediliyor…" : "Kaydet ve Depoya Kaldır"}
           </button>
           <button
             className={`flex h-11 items-center justify-center gap-2 rounded-[4px] px-4 text-sm font-semibold ${libraryTheme.current.primaryButton} ${libraryTheme.current.focusRing}`}
             type="submit"
+            disabled={pendingAction !== null}
           >
             <Save aria-hidden className="h-4 w-4" />
-            Kaydet
+            {pendingAction === "save" ? "Kaydediliyor…" : "Kaydet"}
           </button>
+          </div>
         </footer>
       </form>
-    </div>
+    </LibraryDialog>
   );
 };

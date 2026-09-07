@@ -8,16 +8,41 @@ export type NormalizedFocusSession = ActiveFocusSession & {
 const clampElapsed = (seconds: number, durationSeconds: number): number =>
   Math.min(durationSeconds, Math.max(0, seconds));
 
+const isValidTimestamp = (value: unknown): value is number =>
+  typeof value === "number" &&
+  Number.isFinite(value) &&
+  value >= 0 &&
+  value <= 8_640_000_000_000_000;
+
 export const normalizeFocusSession = (
   session: ActiveFocusSession,
 ): NormalizedFocusSession => {
   const isCurrentFormat =
     (session.status === "running" || session.status === "paused") &&
-    typeof session.accumulatedSeconds === "number";
+    typeof session.accumulatedSeconds === "number" &&
+    Number.isFinite(session.accumulatedSeconds) &&
+    Number.isFinite(session.durationSeconds) &&
+    session.durationSeconds > 0 &&
+    isValidTimestamp(session.startedAt) &&
+    (session.status !== "running" || isValidTimestamp(session.resumedAt));
 
-  if (!isCurrentFormat) {
+  if (!isCurrentFormat || session.needsRestart) {
+    if (
+      isCurrentFormat &&
+      session.status === "paused" &&
+      session.accumulatedSeconds === 0 &&
+      session.resumedAt === undefined
+    ) {
+      return session as NormalizedFocusSession;
+    }
+
     return {
       ...session,
+      startedAt: isValidTimestamp(session.startedAt) ? session.startedAt : 0,
+      durationSeconds:
+        Number.isFinite(session.durationSeconds) && session.durationSeconds > 0
+          ? session.durationSeconds
+          : 25 * 60,
       status: "paused",
       accumulatedSeconds: 0,
       resumedAt: undefined,
@@ -26,13 +51,18 @@ export const normalizeFocusSession = (
     };
   }
 
+  const accumulatedSeconds = clampElapsed(
+    session.accumulatedSeconds ?? 0,
+    session.durationSeconds,
+  );
+  if (accumulatedSeconds === session.accumulatedSeconds) {
+    return session as NormalizedFocusSession;
+  }
+
   return {
     ...session,
     status: session.status!,
-    accumulatedSeconds: clampElapsed(
-      session.accumulatedSeconds ?? 0,
-      session.durationSeconds,
-    ),
+    accumulatedSeconds,
   };
 };
 
@@ -46,7 +76,9 @@ export const getFocusElapsedSeconds = (
 
   const normalized = normalizeFocusSession(session);
   const runningSeconds =
-    normalized.status === "running" && typeof normalized.resumedAt === "number"
+    normalized.status === "running" &&
+    typeof normalized.resumedAt === "number" &&
+    isValidTimestamp(now)
       ? Math.max(0, (now - normalized.resumedAt) / 1000)
       : 0;
 
@@ -72,7 +104,8 @@ export const getFocusCompletionTimestamp = (
     0,
     normalized.durationSeconds - normalized.accumulatedSeconds,
   );
-  return normalized.resumedAt + remainingSeconds * 1_000;
+  const completedAt = normalized.resumedAt + remainingSeconds * 1_000;
+  return isValidTimestamp(completedAt) ? completedAt : null;
 };
 
 export const getFocusRemainingSeconds = (
@@ -81,12 +114,15 @@ export const getFocusRemainingSeconds = (
   now = Date.now(),
 ): number => {
   if (!session) {
-    return defaultDurationSeconds;
+    return Number.isFinite(defaultDurationSeconds)
+      ? Math.max(0, Math.ceil(defaultDurationSeconds))
+      : 25 * 60;
   }
 
+  const normalized = normalizeFocusSession(session);
   return Math.max(
     0,
-    Math.ceil(session.durationSeconds - getFocusElapsedSeconds(session, now)),
+    Math.ceil(normalized.durationSeconds - getFocusElapsedSeconds(normalized, now)),
   );
 };
 
@@ -104,16 +140,16 @@ export const startOrResumeFocusSession = (params: {
       return current;
     }
 
-    return {
+    return normalizeFocusSession({
       ...current,
       status: "running",
       resumedAt: params.now,
       pausedAt: undefined,
       targetBookId: params.targetBookId,
-    };
+    });
   }
 
-  return {
+  return normalizeFocusSession({
     id: params.id,
     targetBookId: params.targetBookId,
     startedAt: params.now,
@@ -123,7 +159,7 @@ export const startOrResumeFocusSession = (params: {
     resumedAt: params.now,
     pausedAt: undefined,
     needsRestart: false,
-  };
+  });
 };
 
 export const pauseFocusSession = (
@@ -136,10 +172,16 @@ export const pauseFocusSession = (
     return normalized;
   }
 
+  const accumulatedSeconds = getFocusElapsedSeconds(normalized, now);
+  // A click at the finish boundary must not prevent the timer from awarding completion.
+  if (accumulatedSeconds >= normalized.durationSeconds) {
+    return normalized;
+  }
+
   return {
     ...normalized,
     status: "paused",
-    accumulatedSeconds: getFocusElapsedSeconds(normalized, now),
+    accumulatedSeconds,
     resumedAt: undefined,
     pausedAt: now,
   };

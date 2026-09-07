@@ -49,6 +49,7 @@ export const createItemWithCostume = (
 
   return {
     ...item,
+    ...(item.kind === "book" ? { skin: undefined } : {}),
     costumeId: costume.id === defaultCostumeId ? undefined : costume.id,
     widthUnits: size.widthUnits,
     heightUnits: size.heightUnits,
