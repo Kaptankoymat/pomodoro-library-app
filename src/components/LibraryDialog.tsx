@@ -30,6 +30,9 @@ export const LibraryDialog = ({
     if (!dialog) return;
 
     const previouslyFocused = document.activeElement;
+    const openerItemId = previouslyFocused instanceof HTMLElement
+      ? previouslyFocused.dataset.itemId
+      : undefined;
     if (openDialogCount === 0) {
       previousBodyOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
@@ -45,6 +48,11 @@ export const LibraryDialog = ({
       }
       if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
         previouslyFocused.focus({ preventScroll: true });
+      } else if (openerItemId) {
+        // A responsive scene change replaces shelf buttons while this dialog
+        // stays open. Restore focus to the same item in the current scene.
+        document.querySelector<HTMLElement>(`[data-item-id="${CSS.escape(openerItemId)}"]`)
+          ?.focus();
       }
     };
   }, []);
@@ -54,7 +62,7 @@ export const LibraryDialog = ({
       {...props}
       ref={dialogRef}
       aria-modal="true"
-      className={`m-0 h-[100dvh] max-h-none w-screen max-w-none border-0 text-inherit outline-none [&:not([open])]:hidden [&::backdrop]:bg-transparent ${className}`}
+      className={`library-dialog ${className}`}
       onCancel={(event) => {
         event.preventDefault();
         onClose();

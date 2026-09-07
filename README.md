@@ -58,6 +58,12 @@ Tarayıcı testleri 3100 portunda üretim sunucusunu açar. İki sekmeli çalı�
 - Erken bitirilen çalışma gerçek süresiyle kaydedilir; XP veya tam Pomodoro ödülü vermez.
 - Aynı oturum kimliği yalnız bir kez tamamlanabilir ve ödüllendirilebilir.
 
+## Görünüm ve mobil kullanım
+
+Ahşap raflar ve büyük odak saatiyle birlikte notlar, görevler, raf yönetimi ve kostümler ortak bir kütüphane temasını kullanır. Telefonda **Rafı düzenle** ile bir nesne seçip konumunu değiştirebilirsiniz; masaüstünde sürükleme devam eder. Ekran boyutu kayıtlı raf düzenini değiştirmez.
+
+Bileşenler, tema katmanları ve ekran görüntüleri için [tasarım notlarına](./docs/tasarim.md) bakın.
+
 ## Geliştirme notları
 
 Durum ve uygulama sırası için [proje durum raporuna](./PROJE_DURUM_RAPORU.md) ve [hata düzeltme planına](./HATA_DUZELTME_PLANI.md) bakılabilir.

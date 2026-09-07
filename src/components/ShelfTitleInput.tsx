@@ -53,7 +53,7 @@ export const ShelfTitleInput = ({ title, onRename }: ShelfTitleInputProps) => {
         aria-busy={isSaving}
         aria-describedby={saveFailed ? `${helpId} ${errorId}` : helpId}
         aria-invalid={saveFailed || undefined}
-        className="h-8 w-full rounded-[2px] border border-[#8b5d37]/55 bg-[#f2dfc3] px-2 text-center text-xs font-bold uppercase tracking-[0.2em] text-[#3b281b] outline-none focus:border-[#6f3f22]"
+        className="library-field library-shelf-title"
         disabled={isSaving}
         value={draft ?? title}
         onChange={(event) => {
@@ -76,13 +76,11 @@ export const ShelfTitleInput = ({ title, onRename }: ShelfTitleInputProps) => {
           }
         }}
       />
-      <span id={helpId} className="sr-only">Enter ile kaydet, Escape ile vazgeç.</span>
+      <span id={helpId} className="sr-only">
+        Enter ile kaydet, Escape ile vazgeç.
+      </span>
       {saveFailed ? (
-        <span
-          id={errorId}
-          role="alert"
-          className="absolute left-0 right-0 top-full z-10 mt-1 rounded-[2px] border border-[#6a3b20] bg-[#f2dfc3] px-2 py-1 text-xs text-[#6a3727]"
-        >
+        <span id={errorId} role="alert" className="library-shelf-title-error">
           Raf adı kaydedilemedi. Taslağın korunuyor.
         </span>
       ) : null}
