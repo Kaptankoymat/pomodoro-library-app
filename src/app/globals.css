@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  background: #fdfbf7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family:
+    Georgia,
+    Cambria,
+    "Times New Roman",
+    Times,
+    serif;
+  overscroll-behavior: none;
+}
+
+button {
+  font: inherit;
+}

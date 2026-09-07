@@ -1,0 +1,12 @@
+.next/
+node_modules/
+.codex-backups/
+.codex-logs/
+
+dev-server.log
+dev-server.err.log
+
+*.tsbuildinfo
+*.bak
+old_dialog.tsx
+.env*.local
