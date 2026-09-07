@@ -1,7 +1,7 @@
 import {
   createBookItem,
   createLibraryId,
-  DEFAULT_SHELF_ROWS,
+  createShelfWithTimer,
   getFirstAvailableSlot,
   getRandomBookColor,
   getRandomBookTitle,
@@ -154,9 +154,21 @@ export const completeFocusSession = (
   );
 
   if (awardedXp === 0) {
+    const items = selectedItem
+      ? state.items.map((item) =>
+          item.id === selectedItem.id
+            ? {
+                ...item,
+                lastStudiedAt: date.getTime(),
+              }
+            : item,
+        )
+      : state.items;
+
     return {
       state: {
         ...state,
+        items,
         wardrobe,
         dailyFocus: {
           ...dailyFocus,
@@ -213,6 +225,7 @@ export const completeFocusSession = (
   let shelves = state.shelves;
   let targetShelf: LibraryShelf | undefined;
   let targetSlot: GridPosition | undefined;
+  let createdTimer: LibraryItem | undefined;
 
   for (const shelf of shelves) {
     const slot = getFirstAvailableSlot(state.items, shelf, bookSize);
@@ -225,14 +238,13 @@ export const completeFocusSession = (
   }
 
   if (!targetShelf || !targetSlot) {
-    const newShelf: LibraryShelf = {
-      id: createLibraryId("shelf"),
-      title: `Shelf ${shelves.length + 1}`,
-      rowCount: DEFAULT_SHELF_ROWS,
-    };
+    const { shelf: newShelf, timer } = createShelfWithTimer({
+      index: shelves.length,
+    });
     shelves = [...shelves, newShelf];
     targetShelf = newShelf;
-    targetSlot = {
+    createdTimer = timer;
+    targetSlot = getFirstAvailableSlot([timer], newShelf, bookSize) ?? {
       row: 0,
       col: 0,
     };
@@ -258,7 +270,7 @@ export const completeFocusSession = (
         xp: dailyFocus.xp + awardedXp,
       },
       activeShelfId: targetShelf.id,
-      items: [...state.items, addedBook],
+      items: [...state.items, ...(createdTimer ? [createdTimer] : []), addedBook],
       wardrobe,
     },
     summary: {

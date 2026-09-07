@@ -7,17 +7,15 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Download,
   Flower2,
   Image as ImageIcon,
-  LogIn,
   Lock,
   Menu,
-  Pause,
-  Play,
   Plus,
-  RotateCcw,
   Sparkles,
   StickyNote,
+  Upload,
   X,
 } from "lucide-react";
 import { BookNoteDialog } from "@/components/BookNoteDialog";
@@ -27,6 +25,15 @@ import { useGridMetrics } from "@/hooks/useGridMetrics";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { usePomodoroTimer } from "@/hooks/usePomodoroTimer";
 import {
+  getFocusElapsedSeconds,
+  pauseFocusSession,
+  startOrResumeFocusSession,
+} from "@/lib/focusSession";
+import {
+  completeNaturalFocusSession,
+  endFocusSessionEarly,
+} from "@/lib/focusCompletion";
+import {
   getResolvedItemPosition,
   gridToPixel,
   pixelToGridTarget,
@@ -34,6 +41,7 @@ import {
   resolveResizeLayout,
   validateGridLayout,
 } from "@/lib/gridLogic";
+import { resolveLibraryShelfDrop } from "@/lib/libraryDrop";
 import {
   createItemWithCostume,
   getCostumeGridSize,
@@ -60,7 +68,7 @@ import {
   createBookItem,
   createDecorItem,
   createLibraryId,
-  createTimerItem,
+  createShelfWithTimer,
   DEFAULT_SHELF_ROWS,
   getFirstAvailableSlot,
   getInitialLibraryState,
@@ -79,12 +87,8 @@ import {
   type SideColumnTarget,
 } from "@/lib/sideColumnLogic";
 import {
-  completeFocusSession,
-  DAILY_XP_LIMIT,
   FOCUS_SESSION_SECONDS,
   getTodayKey,
-  getXpIntoLevel,
-  XP_PER_LEVEL,
 } from "@/lib/libraryProgression";
 import {
   getBookStudyStats,
@@ -181,23 +185,7 @@ const getGridYFromShelfVisualY = (visualY: number, metrics: GridMetrics): number
 const getShelfItemsWithTimer = (
   items: LibraryItem[],
   shelf: LibraryShelf,
-): LibraryItem[] => {
-  const shelfItems = items.filter((item) => item.shelfId === shelf.id);
-  const hasTimer = shelfItems.some((item) => item.kind === "timer");
-
-  if (hasTimer) {
-    return shelfItems;
-  }
-
-  return [
-    createTimerItem({
-      id: `timer-${shelf.id}`,
-      shelfId: shelf.id,
-      position: { row: 1, col: 4 },
-    }),
-    ...shelfItems,
-  ];
-};
+): LibraryItem[] => items.filter((item) => item.shelfId === shelf.id);
 
 const toItemStyle = (
   item: LibraryItem,
@@ -397,22 +385,26 @@ const getShelfItemSlot = (
 
   if (activeSlot) {
     return {
+      newItems: [] as LibraryItem[],
       shelves,
       shelf: activeShelf,
       position: activeSlot,
     };
   }
 
-  const newShelf: LibraryShelf = {
-    id: createLibraryId("shelf"),
-    title: `Raf ${shelves.length + 1}`,
-    rowCount: DEFAULT_SHELF_ROWS,
+  const { shelf: newShelf, timer } = createShelfWithTimer({
+    index: shelves.length,
+  });
+  const position = getFirstAvailableSlot([timer], newShelf, size) ?? {
+    row: 0,
+    col: 0,
   };
 
   return {
+    newItems: [timer] as LibraryItem[],
     shelves: [...shelves, newShelf],
     shelf: newShelf,
-    position: { row: 0, col: 0 },
+    position,
   };
 };
 
@@ -1145,7 +1137,7 @@ const ShelfScene = ({
             <div
               key={placement}
               ref={placement === "left-column" ? leftSideColumnRef : rightSideColumnRef}
-              className={`pointer-events-none absolute bottom-0 top-20 z-40 w-[72px] sm:top-24 sm:w-[96px] ${
+              className={`pointer-events-none absolute bottom-64 top-20 z-40 w-[72px] sm:bottom-0 sm:top-24 sm:w-[96px] ${
                 placement === "left-column" ? "left-0" : "right-0"
               }`}
               data-side-column={placement}
@@ -1335,9 +1327,10 @@ const ShelfScene = ({
           );
         })}
 
+        <div className="relative h-full w-full overflow-x-auto overflow-y-hidden overscroll-x-contain">
         <div
           ref={containerRef}
-          className="relative flex h-full w-full items-start justify-center overflow-hidden rounded-t-[4px] rounded-b-none border border-[#7a4828] border-b-0 bg-[#4a2817] px-[86px] pb-8 pt-14 sm:px-[120px] sm:pb-8 sm:pt-16"
+          className="relative flex h-full min-w-[1000px] items-start justify-center overflow-hidden rounded-t-[4px] rounded-b-none border border-[#7a4828] border-b-0 bg-[#4a2817] px-[86px] pb-8 pt-14 sm:px-[120px] sm:pb-8 sm:pt-16 lg:min-w-0"
         >
           <div
             ref={gridRef}
@@ -1691,26 +1684,12 @@ const ShelfScene = ({
             </motion.div>
           ) : null}
         </div>
+        </div>
         {children}
       </div>
       </div>
     </div>
   );
-};
-
-type TimerModalProps = {
-  focusTargets: LibraryItem[];
-  selectedFocusItemId: string | null;
-  timerText: string;
-  isRunning: boolean;
-  rewardSummary: FocusRewardSummary | null;
-  dailyXp: number;
-  onSelectFocusItem: (itemId: string | null) => void;
-  onClose: () => void;
-  onStart: () => void;
-  onPause: () => void;
-  onReset: () => void;
-  onFinish: () => void;
 };
 
 const itemKindLabel: Record<LibraryItemKind, string> = {
@@ -1719,211 +1698,6 @@ const itemKindLabel: Record<LibraryItemKind, string> = {
   plant: "Saksi",
   sticky: "Not",
   timer: "Sayac",
-};
-
-export const TimerModal = ({
-  focusTargets,
-  selectedFocusItemId,
-  timerText,
-  isRunning,
-  rewardSummary,
-  dailyXp,
-  onSelectFocusItem,
-  onClose,
-  onStart,
-  onPause,
-  onReset,
-  onFinish,
-}: TimerModalProps) => {
-  const selectedFocusItem =
-    focusTargets.find((item) => item.id === selectedFocusItemId) ?? null;
-  const selectedItemXp = selectedFocusItem
-    ? getXpIntoLevel(selectedFocusItem.xp)
-    : 0;
-  const selectedProgress = selectedFocusItem
-    ? Math.round((selectedItemXp / XP_PER_LEVEL) * 100)
-    : 0;
-  const normalizedDailyXp = Math.min(Math.max(dailyXp, 0), DAILY_XP_LIMIT);
-  const remainingDailyXp = DAILY_XP_LIMIT - normalizedDailyXp;
-  const dailyProgress = Math.round((normalizedDailyXp / DAILY_XP_LIMIT) * 100);
-  let rewardMessage = rewardSummary
-    ? [
-        rewardSummary.awardedXp > 0 ? `+${rewardSummary.awardedXp} XP` : null,
-        rewardSummary.leveledUpItemTitle
-          ? `${rewardSummary.leveledUpBookTitle} level atladı`
-          : null,
-        rewardSummary.addedBookTitle
-          ? `${rewardSummary.addedBookTitle} rafa eklendi`
-          : null,
-        rewardSummary.droppedCostumeName
-          ? `${rewardSummary.droppedSkin} skin düştü`
-          : null,
-        rewardSummary.capped
-          ? rewardSummary.awardedXp > 0
-            ? "Günlük limit tamamlandı"
-            : "Günlük XP limiti doldu"
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" - ")
-    : null;
-
-  if (rewardSummary) {
-    rewardMessage = [
-      rewardSummary.awardedXp > 0 ? `+${rewardSummary.awardedXp} XP` : null,
-      rewardSummary.leveledUpItemTitle
-        ? `${rewardSummary.leveledUpItemTitle} level atladi`
-        : null,
-      rewardSummary.addedBookTitle
-        ? `${rewardSummary.addedBookTitle} rafa eklendi`
-        : null,
-      rewardSummary.droppedCostumeName
-        ? `${rewardSummary.droppedCostumeName} kostumu acildi`
-        : null,
-      rewardSummary.capped
-        ? rewardSummary.awardedXp > 0
-          ? "Gunluk limit tamamlandi"
-          : "Gunluk XP limiti doldu"
-        : null,
-    ]
-      .filter(Boolean)
-      .join(" - ");
-  }
-
-  return (
-    <div
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm"
-      role="dialog"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-    >
-      <div className="w-full max-w-lg rounded-md border border-[#c5b49e]/80 bg-[#e3d7c1] text-[#3e3225] shadow-2xl shadow-[#4a3b2c]/25">
-        <div className="flex items-center justify-between border-b border-[#c5b49e] px-5 py-4">
-          <div>
-            <h2 className="text-lg font-semibold text-[#3e3225]">Pomodoro</h2>
-            <p className="mt-1 text-sm text-[#8b7965]">
-              Bir kitabı geliştir veya yeni bir kitap kazan.
-            </p>
-          </div>
-          <button
-            aria-label="Kapat"
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-amber-200/15 text-stone-300 transition hover:bg-amber-100/10 hover:text-amber-50"
-            type="button"
-            onClick={onClose}
-          >
-            <X aria-hidden className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="grid gap-5 px-5 py-5">
-          <div className="text-center">
-            <div className="text-6xl font-semibold tracking-normal text-amber-50">
-              {timerText}
-            </div>
-            <div className="mt-4 flex justify-center gap-2">
-              <button
-                aria-label={isRunning ? "Duraklat" : "Başlat"}
-                className="flex h-11 w-11 items-center justify-center rounded-md bg-amber-200 text-stone-950 transition hover:bg-amber-100"
-                type="button"
-                onClick={isRunning ? onPause : onStart}
-              >
-                {isRunning ? (
-                  <Pause aria-hidden className="h-5 w-5" />
-                ) : (
-                  <Play aria-hidden className="h-5 w-5" />
-                )}
-              </button>
-              <button
-                aria-label="Sıfırla"
-                className="flex h-11 w-11 items-center justify-center rounded-md border border-amber-200/15 text-amber-100 transition hover:bg-amber-100/10"
-                type="button"
-                onClick={onReset}
-              >
-                <RotateCcw aria-hidden className="h-5 w-5" />
-              </button>
-              <button
-                className="flex h-11 items-center gap-2 rounded-md border border-emerald-200/25 px-4 text-sm text-emerald-100 transition hover:bg-emerald-300/10"
-                type="button"
-                onClick={onFinish}
-              >
-                <Sparkles aria-hidden className="h-4 w-4" />
-                Bitir
-              </button>
-            </div>
-          </div>
-
-          <label className="grid gap-2 text-sm text-stone-300">
-            <span className="font-medium text-amber-100">Odak ödülü</span>
-            <select
-              className="h-11 rounded-md border border-amber-200/15 bg-stone-900 px-3 text-sm text-stone-100 outline-none focus:border-amber-300/60"
-              value={selectedFocusItemId ?? ""}
-              onChange={(event) => onSelectFocusItem(event.target.value || null)}
-            >
-              <option value="">Yeni kitap kazan</option>
-              {focusTargets.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title} ({itemKindLabel[item.kind]}) - Lv {item.level}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {selectedFocusItem ? (
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between text-xs text-[#9c8975]">
-                <span>
-                  {selectedFocusItem.title} Lv {selectedFocusItem.level}
-                </span>
-                <span>
-                  {selectedItemXp}/{XP_PER_LEVEL} XP
-                </span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-stone-800">
-                <div
-                  className="h-full rounded-full bg-amber-300"
-                  style={{ width: `${selectedProgress}%` }}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-md border border-amber-200/15 bg-stone-900/75 px-3 py-2 text-sm text-amber-50">
-              Bu seans bittiğinde rafına yeni bir kitap düşer.
-            </div>
-          )}
-
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between text-xs text-[#9c8975]">
-              <span>Günlük XP limiti</span>
-              <span>
-                {normalizedDailyXp}/{DAILY_XP_LIMIT} XP
-              </span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-stone-800">
-              <div
-                className="h-full rounded-full bg-emerald-300"
-                style={{ width: `${dailyProgress}%` }}
-              />
-            </div>
-            <div className="text-xs text-[#9c8975]">
-              {remainingDailyXp > 0
-                ? `Bugün kalan ${remainingDailyXp} XP`
-                : "Bugün limit tamamlandı"}
-            </div>
-          </div>
-
-          {rewardMessage ? (
-            <div className="rounded-md border border-amber-200/15 bg-stone-900/85 px-3 py-2 text-sm text-amber-50">
-              {rewardMessage}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
 };
 
 type TaskModalProps = {
@@ -1935,6 +1709,17 @@ type TaskModalProps = {
 
 const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask }: TaskModalProps) => {
   const [draftTask, setDraftTask] = useState("");
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   return (
     <div
@@ -1949,7 +1734,7 @@ const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask }: TaskModalProps) 
     >
       <div className="w-full max-w-md rounded-md border border-[#bba88c] bg-[#f4efe6] text-[#2f251b] shadow-2xl shadow-[#4a3b2c]/25">
         <div className="flex items-center justify-between border-b border-[#c5b49e] px-5 py-4">
-          <h2 className="text-lg font-semibold text-[#2f251b]">Sticky Tasks</h2>
+          <h2 id="task-dialog-title" className="text-lg font-semibold text-[#2f251b]">Görevler</h2>
           <button
             aria-label="Kapat"
             className="flex h-9 w-9 items-center justify-center rounded-md border border-[#bba88c] text-[#6e5c47] transition hover:bg-[#e3d7c1] hover:text-[#2f251b]"
@@ -1960,7 +1745,7 @@ const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask }: TaskModalProps) 
           </button>
         </div>
 
-        <div className="grid gap-4 px-5 py-5">
+        <div className="grid max-h-[calc(100dvh-9rem)] gap-4 overflow-y-auto px-5 py-5">
           <form
             className="flex gap-2"
             onSubmit={(event) => {
@@ -1976,14 +1761,15 @@ const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask }: TaskModalProps) 
             }}
           >
             <input
-              aria-label="Yeni task"
+              autoFocus
+              aria-label="Yeni görev"
               className="min-w-0 flex-1 rounded-md border border-[#bba88c] bg-[#fffaf1] px-3 text-sm text-[#2f251b] outline-none focus:border-[#8a6040]"
-              placeholder="Task"
+              placeholder="Görev"
               value={draftTask}
               onChange={(event) => setDraftTask(event.target.value)}
             />
             <button
-              aria-label="Task ekle"
+              aria-label="Görev ekle"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-200 text-stone-950 transition hover:bg-amber-100"
               type="submit"
             >
@@ -2251,7 +2037,7 @@ const AddMenu = ({
   onToggle,
   onToggleWardrobe,
 }: AddMenuProps) => (
-  <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
+  <div className="fixed bottom-32 right-3 z-40 flex flex-col items-end gap-2 md:bottom-6 md:right-6">
     {isOpen ? (
       <div className="grid min-w-44 gap-2 rounded-md border border-[#c5b49e] bg-[#e3d7c1]/95 p-2 shadow-xl shadow-[#4a3b2c]/25 backdrop-blur">
         <button
@@ -2323,7 +2109,7 @@ const AddMenu = ({
 
 export const LibraryGrid = () => {
   const initialLibraryState = useMemo(() => getInitialLibraryState(), []);
-  const [libraryState, setLibraryState] = useLocalStorageState<LibraryState>(
+  const [libraryState, setLibraryState, persistence] = useLocalStorageState<LibraryState>(
     STORAGE_KEY,
     initialLibraryState,
   );
@@ -2341,6 +2127,13 @@ export const LibraryGrid = () => {
   >(null);
   const [wardrobeScope, setWardrobeScope] = useState<WardrobeScope>("item");
   const [pendingCostumeId, setPendingCostumeId] = useState<CostumeId | null>(null);
+  const [storageNotice, setStorageNotice] = useState<string | null>(null);
+  const selectedNoteBaselineRef = useRef<{
+    id: string;
+    note?: string;
+    noteUpdatedAt?: number;
+    title: string;
+  } | null>(null);
   const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeShelf =
@@ -2452,14 +2245,18 @@ export const LibraryGrid = () => {
   }, [pendingCostume, selectedWardrobeItem, wardrobeScope, wardrobeValidation]);
 
   useEffect(() => {
-    setLibraryState((currentState) => normalizeLibraryStateForRuntime(currentState));
+    if (!persistence.isHydrated || persistence.error) {
+      return;
+    }
+
+    const normalizedState = normalizeLibraryStateForRuntime(libraryState);
+    if (normalizedState !== libraryState) {
+      void setLibraryState((currentState) => normalizeLibraryStateForRuntime(currentState));
+    }
   }, [
-    libraryState.focusSessions,
-    libraryState.schemaVersion,
-    libraryState.shelfColumnCount,
-    libraryState.sideColumnSlotCount,
-    libraryState.archivedBooks,
-    libraryState.tasks,
+    libraryState,
+    persistence.error,
+    persistence.isHydrated,
     setLibraryState,
   ]);
 
@@ -2515,81 +2312,76 @@ export const LibraryGrid = () => {
     }
   }, [activeShelfId, scheduleShelfGridValidation]);
 
-  const completeSession = useCallback(() => {
-    setLibraryState((currentState) => {
-      const completedAt = Date.now();
-      const session =
-        currentState.activeFocusSession ?? {
-          id: createLibraryId("focus"),
-          targetBookId: currentState.selectedFocusItemId ?? null,
-          startedAt: completedAt - FOCUS_SESSION_SECONDS * 1000,
-          durationSeconds: FOCUS_SESSION_SECONDS,
-        };
-      const result = completeFocusSession(
-        currentState,
-        currentState.selectedFocusItemId ?? currentState.selectedBookId ?? null,
-      );
-      const sessionRecord = {
-        id: session.id,
-        targetBookId: currentState.selectedFocusItemId ?? null,
-        startedAt: session.startedAt,
-        completedAt,
-        durationSeconds: session.durationSeconds,
-        awardedXp: result.summary.awardedXp,
-        addedBookId: result.summary.addedBookId,
-      };
+  const completeSession = useCallback(async (sessionId: string) => {
+    let completedSummary: FocusRewardSummary | null = null;
 
-      setRewardSummary(result.summary);
-      return {
-        ...result.state,
-        activeFocusSession: null,
-        focusSessions: [sessionRecord, ...(currentState.focusSessions ?? [])],
-      };
+    const persistedState = await setLibraryState((currentState) => {
+      const result = completeNaturalFocusSession({
+        completedAt: Date.now(),
+        sessionId,
+        state: currentState,
+      });
+      completedSummary = result.summary;
+      return result.state;
     });
+
+    const wasPersisted = (persistedState.focusSessions ?? []).some(
+      (sessionRecord) => sessionRecord.id === sessionId,
+    );
+    if (completedSummary && wasPersisted) {
+      setRewardSummary(completedSummary);
+    }
   }, [setLibraryState]);
 
   const timer = usePomodoroTimer({
     durationSeconds: FOCUS_SESSION_SECONDS,
+    session: libraryState.activeFocusSession,
     onComplete: completeSession,
   });
 
   const timerText = formatTimer(timer.remainingSeconds);
 
   const startFocusTimer = useCallback(() => {
-    const startedAt = Date.now();
+    const now = Date.now();
+    const sessionId = createLibraryId("focus");
 
-    setLibraryState((currentState) => ({
+    void setLibraryState((currentState) => ({
       ...currentState,
-      activeFocusSession: {
-        id: currentState.activeFocusSession?.id ?? createLibraryId("focus"),
-        targetBookId: currentState.selectedFocusItemId ?? null,
-        startedAt: currentState.activeFocusSession?.startedAt ?? startedAt,
+      activeFocusSession: startOrResumeFocusSession({
+        current: currentState.activeFocusSession,
         durationSeconds: FOCUS_SESSION_SECONDS,
-      },
+        id: sessionId,
+        now,
+        targetBookId: currentState.selectedFocusItemId ?? null,
+      }),
     }));
-    timer.start();
-  }, [setLibraryState, timer]);
+  }, [setLibraryState]);
 
   const pauseFocusTimer = useCallback(() => {
-    setLibraryState((currentState) => ({
+    const now = Date.now();
+
+    void setLibraryState((currentState) => ({
       ...currentState,
       activeFocusSession: currentState.activeFocusSession
-        ? {
-            ...currentState.activeFocusSession,
-            pausedAt: Date.now(),
-          }
+        ? pauseFocusSession(currentState.activeFocusSession, now)
         : null,
     }));
-    timer.pause();
-  }, [setLibraryState, timer]);
+  }, [setLibraryState]);
 
   const resetFocusTimer = useCallback(() => {
-    setLibraryState((currentState) => ({
+    void setLibraryState((currentState) => ({
       ...currentState,
       activeFocusSession: null,
     }));
-    timer.reset();
-  }, [setLibraryState, timer]);
+  }, [setLibraryState]);
+
+  const finishFocusTimer = useCallback(async () => {
+    const completedAt = Date.now();
+
+    await setLibraryState((currentState) => {
+      return endFocusSessionEarly(currentState, completedAt);
+    });
+  }, [setLibraryState]);
 
   const selectFocusBook = useCallback(
     (bookId: string) => {
@@ -2766,31 +2558,17 @@ export const LibraryGrid = () => {
   const moveItem = useCallback(
     (shelf: LibraryShelf, itemId: string, position: GridPosition) => {
       setLibraryState((currentState) => {
-        const draggedItem = currentState.items.find((item) => item.id === itemId);
-        const shelfDropItems = getShelfItemsWithTimer(currentState.items, shelf).filter(
-          isShelfPlacedItem,
-        );
-        const resolutionItems =
-          draggedItem && !isShelfPlacedItem(draggedItem)
-            ? [
-                ...shelfDropItems,
-                {
-                  ...draggedItem,
-                  placement: "shelf" as const,
-                  sideSlot: undefined,
-                },
-              ]
-            : shelfDropItems;
-        const resolution = resolveDrop(
+        const resolution = resolveLibraryShelfDrop({
           itemId,
+          items: currentState.items,
+          metrics: getShelfMetrics(),
           position,
-          resolutionItems,
-          getShelfMetrics(),
-          {
-            canSwap: (draggedItem, targetItem) =>
-              isBookItem(draggedItem) && isBookItem(targetItem),
-          },
-        );
+          shelf,
+        });
+
+        if (resolution.type === "snap-back") {
+          return currentState;
+        }
 
         return replaceShelfItems(currentState, shelf.id, resolution.items);
       });
@@ -2826,34 +2604,98 @@ export const LibraryGrid = () => {
   );
 
   const saveBookNote = useCallback(
-    (bookId: string, data: { title: string; note: string }) => {
+    async (bookId: string, data: { title: string; note: string }) => {
       const noteUpdatedAt = Date.now();
+      const openedBook = selectedNoteBaselineRef.current;
+      let conflict = false;
 
-      setLibraryState((currentState) => ({
-        ...currentState,
-        items: currentState.items.map((item) =>
-          item.id === bookId && isBookItem(item)
-            ? {
-                ...item,
-                title: data.title,
-                note: data.note || undefined,
-                noteUpdatedAt: data.note ? noteUpdatedAt : undefined,
-              }
-            : item,
-        ),
-      }));
+      await setLibraryState((currentState) => {
+        const currentBook = currentState.items.find(
+          (item): item is BookItem => item.id === bookId && isBookItem(item),
+        );
+        if (
+          currentBook &&
+          (currentBook.title !== openedBook?.title ||
+            (currentBook.noteUpdatedAt !== openedBook?.noteUpdatedAt &&
+              currentBook.note !== openedBook?.note))
+        ) {
+          conflict = true;
+          return currentState;
+        }
+
+        return {
+          ...currentState,
+          items: currentState.items.map((item) =>
+            item.id === bookId && isBookItem(item)
+              ? {
+                  ...item,
+                  title: data.title,
+                  note: data.note || undefined,
+                  noteUpdatedAt: data.note ? noteUpdatedAt : undefined,
+                }
+              : item,
+          ),
+        };
+      });
+
+      if (conflict) {
+        setStorageNotice(
+          "Bu not başka bir sekmede değişti. Taslağın korunuyor; güncel notu görmek için pencereyi kapatıp yeniden aç.",
+        );
+        return;
+      }
+
       setSelectedNoteBookId(null);
     },
     [setLibraryState],
   );
 
+  const downloadBackup = useCallback(() => {
+    const blob = new Blob([persistence.exportData()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `pomodoro-library-${getTodayKey()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    window.setTimeout(() => {
+      link.remove();
+      URL.revokeObjectURL(url);
+    }, 1_000);
+    setStorageNotice("Yedek dosyası hazırlandı.");
+  }, [persistence]);
+
+  const importBackup = useCallback(
+    async (file: File) => {
+      try {
+        const rawValue = await file.text();
+        const parsed = JSON.parse(rawValue) as {
+          data?: { items?: unknown[]; shelves?: unknown[]; tasks?: unknown[] };
+        };
+        const summary = parsed.data;
+        const shouldImport = window.confirm(
+          `Bu yedek ${summary?.shelves?.length ?? 0} raf, ${summary?.items?.length ?? 0} eşya ve ${summary?.tasks?.length ?? 0} görev içeriyor. Mevcut kütüphane değiştirilsin mi?`,
+        );
+        if (!shouldImport) {
+          return;
+        }
+
+        await persistence.importData(rawValue);
+        setStorageNotice("Yedek doğrulandı ve yüklendi.");
+      } catch (error) {
+        setStorageNotice(
+          error instanceof Error ? error.message : "Yedek yüklenemedi.",
+        );
+      }
+    },
+    [persistence],
+  );
+
   const addShelf = useCallback(() => {
-    setLibraryState((currentState) => {
-      const shelf: LibraryShelf = {
-        id: createLibraryId("shelf"),
-        title: `Raf ${currentState.shelves.length + 1}`,
-        rowCount: DEFAULT_SHELF_ROWS,
-      };
+    void setLibraryState((currentState) => {
+      const { shelf, timer } = createShelfWithTimer({
+        index: currentState.shelves.length,
+      });
 
       return {
         ...currentState,
@@ -2861,11 +2703,7 @@ export const LibraryGrid = () => {
         shelves: [...currentState.shelves, shelf],
         items: [
           ...currentState.items,
-          createTimerItem({
-            id: createLibraryId("timer"),
-            shelfId: shelf.id,
-            position: { row: 1, col: 4 },
-          }),
+          timer,
         ],
       };
     });
@@ -2906,7 +2744,7 @@ export const LibraryGrid = () => {
         wardrobe: normalizedWardrobe,
         activeShelfId: target.shelf.id,
         shelves: target.shelves,
-        items: [...currentState.items, item],
+        items: [...currentState.items, ...target.newItems, item],
       };
     });
     setIsAddMenuOpen(false);
@@ -2995,6 +2833,7 @@ export const LibraryGrid = () => {
           shelves: target.shelves,
           items: [
             ...currentState.items,
+            ...target.newItems,
             defaultCostume
               ? createItemWithCostume(decor, defaultCostume, normalizedWardrobe)
               : decor,
@@ -3111,7 +2950,7 @@ export const LibraryGrid = () => {
           ...currentState,
           activeShelfId: target.shelf.id,
           shelves: target.shelves,
-          items: [...currentState.items, restoredBook],
+          items: [...currentState.items, ...target.newItems, restoredBook],
           archivedBooks: (currentState.archivedBooks ?? []).filter(
             (book) => book.id !== bookId,
           ),
@@ -3253,22 +3092,29 @@ export const LibraryGrid = () => {
         onSelectFocusBook={selectFocusBook}
         onSelectWardrobeItem={selectWardrobeItem}
         topRightActions={
-          <button
-            className="flex h-10 items-center gap-2 rounded-[4px] border border-[#5a321c] bg-[#6f3f22]/88 px-4 text-sm font-bold text-amber-50 shadow-[0_4px_8px_rgba(55,30,17,0.36),inset_0_1px_2px_rgba(255,232,190,0.16)] transition hover:bg-[#83502c]"
-            type="button"
-          >
-            <LogIn aria-hidden className="h-4 w-4" />
-            Giriş Yap
-          </button>
+          <span className="rounded bg-[#6f3f22]/88 px-3 py-2 text-xs font-bold text-amber-50">
+            Bu cihazda saklanır
+          </span>
         }
-        onOpenBook={setSelectedNoteBookId}
+        onOpenBook={(bookId) => {
+          const book = books.find((candidate) => candidate.id === bookId);
+          selectedNoteBaselineRef.current = book
+            ? {
+                id: book.id,
+                note: book.note,
+                noteUpdatedAt: book.noteUpdatedAt,
+                title: book.title,
+              }
+            : null;
+          setSelectedNoteBookId(bookId);
+        }}
         onOpenTasks={() => setIsTaskOpen(true)}
         onOpenTimer={() => {
           setRewardSummary(null);
           setIsTimerOpen(true);
         }}
       >
-        <div className="absolute bottom-6 left-1/2 z-40 flex w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-2 rounded-sm border border-[#6a3b20] bg-[#8a5a35] p-2 shadow-[0_8px_16px_rgba(55,30,17,0.42),inset_0_2px_4px_rgba(255,232,190,0.22)] md:flex-row md:items-center">
+        <div className="absolute bottom-6 left-1/2 z-40 grid w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-2 rounded-sm border border-[#6a3b20] bg-[#8a5a35] p-2 shadow-[0_8px_16px_rgba(55,30,17,0.42),inset_0_2px_4px_rgba(255,232,190,0.22)] md:flex md:flex-row">
           <button
             aria-label="Önceki raf"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[2px] border border-[#6a3b20]/60 bg-[#6f3f22] text-amber-50 transition hover:bg-[#83502c]"
@@ -3297,21 +3143,60 @@ export const LibraryGrid = () => {
             <ChevronRight aria-hidden className="h-4 w-4" />
           </button>
 
-          <button
-            aria-label="Raf yönetimini aç"
-            className="flex h-8 shrink-0 items-center justify-center gap-1 rounded-[2px] border border-[#6a3b20]/60 bg-[#6f3f22] px-2 text-xs font-semibold text-amber-50 transition hover:bg-[#83502c]"
-            type="button"
-            onClick={() => {
-              setIsShelfManagerOpen(true);
-              setIsAddMenuOpen(false);
-              setIsWardrobeMode(false);
-            }}
-          >
-            <Menu aria-hidden className="h-3.5 w-3.5" />
-            Raflar
-          </button>
+          <div className="col-span-3 grid grid-cols-4 gap-2 md:contents">
+            <button
+              aria-label="Görevleri aç"
+              className="flex h-8 min-w-0 shrink-0 items-center justify-center rounded-[2px] border border-[#6a3b20]/60 bg-[#6f3f22] px-1 text-xs font-semibold text-amber-50 transition hover:bg-[#83502c]"
+              type="button"
+              onClick={() => setIsTaskOpen(true)}
+            >
+              Görevler
+            </button>
 
-          <div className="flex justify-center gap-1 md:ml-1">
+            <button
+              aria-label="Raf yönetimini aç"
+              className="flex h-8 min-w-0 shrink-0 items-center justify-center gap-1 rounded-[2px] border border-[#6a3b20]/60 bg-[#6f3f22] px-1 text-xs font-semibold text-amber-50 transition hover:bg-[#83502c]"
+              type="button"
+              onClick={() => {
+                setIsShelfManagerOpen(true);
+                setIsAddMenuOpen(false);
+                setIsWardrobeMode(false);
+              }}
+            >
+              <Menu aria-hidden className="hidden h-3.5 w-3.5 lg:block" />
+              Raflar
+            </button>
+
+            <button
+              aria-label="Kütüphane yedeğini indir"
+              className="flex h-8 min-w-0 shrink-0 items-center justify-center gap-1 rounded-[2px] border border-[#6a3b20]/60 bg-[#6f3f22] px-1 text-xs font-semibold text-amber-50 transition hover:bg-[#83502c]"
+              type="button"
+              onClick={downloadBackup}
+            >
+              <Download aria-hidden className="hidden h-3.5 w-3.5 lg:block" />
+              Yedekle
+            </button>
+
+            <label className="flex h-8 min-w-0 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-[2px] border border-[#6a3b20]/60 bg-[#6f3f22] px-1 text-xs font-semibold text-amber-50 transition hover:bg-[#83502c]">
+              <Upload aria-hidden className="hidden h-3.5 w-3.5 lg:block" />
+              Yükle
+              <input
+                accept="application/json,.json"
+                className="sr-only"
+                type="file"
+                onChange={async (event) => {
+                  const input = event.currentTarget;
+                  const file = input.files?.[0];
+                  if (file) {
+                    await importBackup(file);
+                  }
+                  input.value = "";
+                }}
+              />
+            </label>
+          </div>
+
+          <div className="col-span-3 flex justify-center gap-1 md:ml-1">
             {libraryState.shelves.map((shelf) => (
               <button
                 key={shelf.id}
@@ -3329,16 +3214,26 @@ export const LibraryGrid = () => {
 
       {isTimerOpen ? (
         <TimerControlDialog
+          canFinish={Boolean(
+            libraryState.activeFocusSession &&
+              !libraryState.activeFocusSession.needsRestart &&
+              getFocusElapsedSeconds(libraryState.activeFocusSession) >= 1,
+          )}
           dailyXp={currentDailyXp}
           isRunning={timer.isRunning}
           isSelectingBook={isFocusTargetSelectionMode}
           rewardSummary={rewardSummary}
+          recoveryMessage={
+            libraryState.activeFocusSession?.needsRestart
+              ? "Önceki sürümden kalan sayaç güvenle durduruldu. Yeni bir çalışma başlatabilirsin."
+              : undefined
+          }
           selectedBook={selectedFocusBook}
           timerText={timerText}
           onClearReward={() => setRewardSummary(null)}
           onClearTarget={clearFocusTarget}
           onClose={() => setIsTimerOpen(false)}
-          onFinish={timer.completeNow}
+          onFinish={() => void finishFocusTimer()}
           onPause={pauseFocusTimer}
           onRequestBookSelection={() => {
             setIsFocusTargetSelectionMode(true);
@@ -3408,6 +3303,32 @@ export const LibraryGrid = () => {
           onClose={() => setIsTaskOpen(false)}
           onToggleTask={toggleTask}
         />
+      ) : null}
+      {persistence.error || storageNotice ? (
+        <div
+          className="fixed bottom-3 left-1/2 z-[100] flex w-[min(92vw,680px)] -translate-x-1/2 items-center justify-between gap-3 rounded-md border border-amber-300/70 bg-[#2b190f] px-4 py-3 text-sm text-amber-50 shadow-2xl"
+          role={persistence.error ? "alert" : "status"}
+        >
+          <span>{persistence.error ?? storageNotice}</span>
+          <button
+            className="shrink-0 rounded border border-amber-200/40 px-2 py-1 text-xs font-bold"
+            hidden={!persistence.error}
+            type="button"
+            onClick={() => void persistence.retryLastSave()}
+          >
+            Tekrar dene
+          </button>
+          <button
+            className="shrink-0 rounded border border-amber-200/40 px-2 py-1 text-xs font-bold"
+            type="button"
+            onClick={() => {
+              persistence.clearError();
+              setStorageNotice(null);
+            }}
+          >
+            Kapat
+          </button>
+        </div>
       ) : null}
       </div>
     </main>

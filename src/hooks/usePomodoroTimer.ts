@@ -1,19 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  getFocusRemainingSeconds,
+  normalizeFocusSession,
+} from "@/lib/focusSession";
+import type { ActiveFocusSession } from "@/types/library";
 
 type UsePomodoroTimerParams = {
   durationSeconds: number;
-  onComplete: () => void;
+  session: ActiveFocusSession | null | undefined;
+  onComplete: (sessionId: string) => void;
 };
 
 export const usePomodoroTimer = ({
   durationSeconds,
+  session,
   onComplete,
 }: UsePomodoroTimerParams) => {
-  const [remainingSeconds, setRemainingSeconds] = useState(durationSeconds);
-  const [isRunning, setIsRunning] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const completeRef = useRef(onComplete);
+  const completionRequestedRef = useRef<string | null>(null);
+  const normalizedSession = session ? normalizeFocusSession(session) : null;
+  const isRunning = normalizedSession?.status === "running";
 
   useEffect(() => {
     completeRef.current = onComplete;
@@ -24,55 +33,41 @@ export const usePomodoroTimer = ({
       return;
     }
 
-    const intervalId = window.setInterval(() => {
-      setRemainingSeconds((currentSeconds) => {
-        const nextSeconds = Math.max(0, currentSeconds - 1);
-
-        if (nextSeconds === 0) {
-          window.clearInterval(intervalId);
-          window.setTimeout(() => {
-            setIsRunning(false);
-            completeRef.current();
-          }, 0);
-        }
-
-        return nextSeconds;
-      });
-    }, 1000);
+    const refreshNow = () => {
+      setNow((currentNow) => Math.max(currentNow + 1, Date.now()));
+    };
+    const intervalId = window.setInterval(refreshNow, 250);
+    document.addEventListener("visibilitychange", refreshNow);
 
     return () => {
       window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", refreshNow);
     };
-  }, [isRunning]);
+  }, [isRunning, session?.id]);
 
-  const start = useCallback(() => {
-    setRemainingSeconds((currentSeconds) =>
-      currentSeconds === 0 ? durationSeconds : currentSeconds,
-    );
-    setIsRunning(true);
-  }, [durationSeconds]);
+  const remainingSeconds = getFocusRemainingSeconds(session, durationSeconds, now);
 
-  const pause = useCallback(() => {
-    setIsRunning(false);
-  }, []);
+  useEffect(() => {
+    if (!session || !isRunning || remainingSeconds > 0) {
+      return;
+    }
 
-  const reset = useCallback(() => {
-    setIsRunning(false);
-    setRemainingSeconds(durationSeconds);
-  }, [durationSeconds]);
+    if (completionRequestedRef.current === session.id) {
+      return;
+    }
 
-  const completeNow = useCallback(() => {
-    setIsRunning(false);
-    setRemainingSeconds(durationSeconds);
-    completeRef.current();
-  }, [durationSeconds]);
+    completionRequestedRef.current = session.id;
+    completeRef.current(session.id);
+  }, [isRunning, remainingSeconds, session]);
+
+  useEffect(() => {
+    if (!session || session.id !== completionRequestedRef.current) {
+      completionRequestedRef.current = null;
+    }
+  }, [session]);
 
   return {
     remainingSeconds,
     isRunning,
-    start,
-    pause,
-    reset,
-    completeNow,
   };
 };

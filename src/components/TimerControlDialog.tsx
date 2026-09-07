@@ -13,10 +13,12 @@ import { DAILY_XP_LIMIT, XP_PER_LEVEL, getXpIntoLevel } from "@/lib/libraryProgr
 import type { BookItem, FocusRewardSummary } from "@/types/library";
 
 type TimerControlDialogProps = {
+  canFinish: boolean;
   dailyXp: number;
   isRunning: boolean;
   isSelectingBook: boolean;
   rewardSummary: FocusRewardSummary | null;
+  recoveryMessage?: string;
   selectedBook: BookItem | null;
   timerText: string;
   onClearReward: () => void;
@@ -37,18 +39,18 @@ const getRewardMessage = (rewardSummary: FocusRewardSummary | null): string | nu
   return [
     rewardSummary.awardedXp > 0 ? `+${rewardSummary.awardedXp} XP` : null,
     rewardSummary.leveledUpItemTitle
-      ? `${rewardSummary.leveledUpItemTitle} level atladi`
+      ? `${rewardSummary.leveledUpItemTitle} seviye atladı`
       : null,
     rewardSummary.addedBookTitle
-      ? `${rewardSummary.addedBookTitle} rafa dustu`
+      ? `${rewardSummary.addedBookTitle} rafa düştü`
       : null,
     rewardSummary.droppedCostumeName
-      ? `${rewardSummary.droppedCostumeName} kostumu acildi`
+      ? `${rewardSummary.droppedCostumeName} kostümü açıldı`
       : null,
     rewardSummary.capped
       ? rewardSummary.awardedXp > 0
-        ? "Gunluk limit tamamlandi"
-        : "Gunluk XP limiti doldu"
+        ? "Günlük limit tamamlandı"
+        : "Günlük XP limiti doldu"
       : null,
   ]
     .filter(Boolean)
@@ -56,10 +58,12 @@ const getRewardMessage = (rewardSummary: FocusRewardSummary | null): string | nu
 };
 
 export const TimerControlDialog = ({
+  canFinish,
   dailyXp,
   isRunning,
   isSelectingBook,
   rewardSummary,
+  recoveryMessage,
   selectedBook,
   timerText,
   onClearReward,
@@ -128,6 +132,12 @@ export const TimerControlDialog = ({
           </button>
         </div>
 
+        {recoveryMessage ? (
+          <p className="rounded-md border border-amber-300/45 bg-[#3a2114]/75 px-3 py-2 text-sm text-amber-50">
+            {recoveryMessage}
+          </p>
+        ) : null}
+
         {/* Timer Box */}
         <div className="relative overflow-hidden rounded-md border border-[#6a3b20] bg-[#6f3f22]/50 p-3 sm:p-4 shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)]">
           <div className="relative z-10 flex items-center justify-center gap-3">
@@ -152,7 +162,7 @@ export const TimerControlDialog = ({
         <div className="grid gap-3 rounded-md border border-[#6a3b20] bg-[#6f3f22]/50 p-4 shadow-[inset_0_2px_6px_rgba(0,0,0,0.4)]">
           <div className="flex items-center justify-between gap-3 text-xs uppercase font-bold tracking-wider">
             <span className="text-amber-100/70">
-              {isSelectingBook ? "Kitapliktan bir kitap seciliyor" : "Gunluk XP"}
+              {isSelectingBook ? "Kütüphaneden bir kitap seçiliyor" : "Günlük XP"}
             </span>
             <span className="text-amber-50">
               {dailyXp}/{DAILY_XP_LIMIT}
@@ -187,7 +197,7 @@ export const TimerControlDialog = ({
         {/* Action Buttons */}
         <div className="grid grid-cols-[auto_auto_1fr] gap-3 sm:grid-cols-[auto_auto_auto_1fr]">
           <button
-            aria-label={isRunning ? "Duraklat" : "Baslat"}
+            aria-label={isRunning ? "Duraklat" : "Başlat"}
             className="flex h-12 w-12 items-center justify-center rounded-[4px] border-b-[3px] border-[#925f2b] bg-[#c28442] text-[#2a170a] shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#d99b59] hover:brightness-110 active:translate-y-[3px] active:border-b-0 active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
             type="button"
             onClick={isRunning ? onPause : onStart}
@@ -199,7 +209,7 @@ export const TimerControlDialog = ({
             )}
           </button>
           <button
-            aria-label="Sifirla"
+            aria-label="Sıfırla"
             className="flex h-12 w-12 items-center justify-center rounded-[4px] border border-[#6a3b20] border-b-[3px] bg-[#6f3f22] text-amber-50 shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#83502c] hover:brightness-110 active:translate-y-[2px] active:border-b border-[#6a3b20] active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
             type="button"
             onClick={onReset}
@@ -207,7 +217,8 @@ export const TimerControlDialog = ({
             <RotateCcw aria-hidden className="h-5 w-5" />
           </button>
           <button
-            className="flex h-12 items-center justify-center gap-2 rounded-[4px] border border-[#6a3b20] border-b-[3px] bg-[#6f3f22] px-4 text-sm font-bold uppercase tracking-wider text-[#10b981] shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#83502c] hover:brightness-110 active:translate-y-[2px] active:border-b border-[#6a3b20] active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+            className="flex h-12 items-center justify-center gap-2 rounded-[4px] border border-[#6a3b20] border-b-[3px] bg-[#6f3f22] px-4 text-sm font-bold uppercase tracking-wider text-[#10b981] shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#83502c] hover:brightness-110 active:translate-y-[2px] active:border-b border-[#6a3b20] active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-45"
+            disabled={!canFinish}
             type="button"
             onClick={onFinish}
           >
@@ -223,7 +234,7 @@ export const TimerControlDialog = ({
             onClick={onRequestBookSelection}
           >
             <BookOpen aria-hidden className="h-4 w-4" />
-            Kitap sec
+            Kitap seç
           </button>
         </div>
 

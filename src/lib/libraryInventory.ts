@@ -22,7 +22,7 @@ import {
 export const GRID_COLUMN_COUNT = 28;
 export const DEFAULT_SHELF_ROWS = 4;
 export const SIDE_COLUMN_SLOT_COUNT = DEFAULT_SHELF_ROWS * 2;
-export const LIBRARY_SCHEMA_VERSION = 5;
+export const LIBRARY_SCHEMA_VERSION = 6;
 
 const bookTitles = [
   "Deep Work",
@@ -111,6 +111,82 @@ export const createTimerItem = (params: {
   };
 };
 
+export const createShelfWithTimer = (params: {
+  id?: string;
+  index: number;
+  title?: string;
+}): { shelf: LibraryShelf; timer: TimerItem } => {
+  const shelf: LibraryShelf = {
+    id: params.id ?? createLibraryId("shelf"),
+    title: params.title ?? `Raf ${params.index + 1}`,
+    rowCount: DEFAULT_SHELF_ROWS,
+  };
+
+  return {
+    shelf,
+    timer: createTimerItem({
+      id: `timer-${shelf.id}`,
+      shelfId: shelf.id,
+      position: { row: 1, col: 4 },
+    }),
+  };
+};
+
+export const ensureShelfTimers = (
+  shelves: LibraryShelf[],
+  items: LibraryItem[],
+): LibraryItem[] => {
+  let nextItems = [...items];
+  let changed = false;
+
+  for (const shelf of shelves) {
+    const shelfTimers = nextItems.filter(
+      (item): item is TimerItem => item.shelfId === shelf.id && item.kind === "timer",
+    );
+
+    if (shelfTimers.length > 1) {
+      const keeper = [...shelfTimers].sort(
+        (left, right) =>
+          Number(Boolean(right.costumeId)) - Number(Boolean(left.costumeId)) ||
+          right.xp - left.xp,
+      )[0];
+      const mergedKeeper: TimerItem = {
+        ...keeper,
+        xp: Math.max(...shelfTimers.map((timer) => timer.xp)),
+        level: Math.max(...shelfTimers.map((timer) => timer.level)),
+        costumeId:
+          keeper.costumeId ?? shelfTimers.find((timer) => timer.costumeId)?.costumeId,
+      };
+      const duplicateIds = new Set(
+        shelfTimers.filter((timer) => timer.id !== keeper.id).map((timer) => timer.id),
+      );
+      nextItems = nextItems.map((item) =>
+        item.id === keeper.id ? mergedKeeper : item,
+      ).filter((item) => !duplicateIds.has(item.id));
+      changed = true;
+      continue;
+    }
+
+    if (shelfTimers.length === 1) continue;
+
+    const timerSize = getLibraryItemDesign("timer");
+    const position = getFirstAvailableSlot(nextItems, shelf, timerSize) ?? {
+      row: 1,
+      col: 4,
+    };
+    nextItems.push(
+      createTimerItem({
+        id: `timer-${shelf.id}`,
+        shelfId: shelf.id,
+        position,
+      }),
+    );
+    changed = true;
+  }
+
+  return changed ? nextItems : items;
+};
+
 export const createDecorItem = (params: {
   id: string;
   kind: Exclude<LibraryItemKind, "book" | "timer">;
@@ -155,11 +231,11 @@ export const getFirstAvailableSlot = (
 
 export const getInitialLibraryState = (): LibraryState => {
   const createdAt = Date.now();
-  const firstShelf: LibraryShelf = {
+  const { shelf: firstShelf, timer: firstTimer } = createShelfWithTimer({
     id: "shelf-1",
-    title: "Main Shelf",
-    rowCount: DEFAULT_SHELF_ROWS,
-  };
+    index: 0,
+    title: "Ana Raf",
+  });
 
   return {
     schemaVersion: LIBRARY_SCHEMA_VERSION,
@@ -190,11 +266,7 @@ export const getInitialLibraryState = (): LibraryState => {
       },
     ],
     items: [
-      createTimerItem({
-        id: "timer",
-        shelfId: firstShelf.id,
-        position: { row: 1, col: 5 },
-      }),
+      firstTimer,
       createBookItem({
         id: "book-1",
         shelfId: firstShelf.id,

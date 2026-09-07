@@ -74,7 +74,11 @@ export type ActiveFocusSession = {
   targetBookId: string | null;
   startedAt: number;
   durationSeconds: number;
+  status?: "running" | "paused";
+  accumulatedSeconds?: number;
+  resumedAt?: number;
   pausedAt?: number;
+  needsRestart?: boolean;
 };
 
 export type LibraryFocusSessionRecord = {
@@ -85,6 +89,7 @@ export type LibraryFocusSessionRecord = {
   durationSeconds: number;
   awardedXp: number;
   addedBookId?: string;
+  completion?: "completed" | "ended-early";
 };
 
 export type LibraryState = {

@@ -35,7 +35,12 @@ export const getBookStudyStats = (
     totalSessions: bookSessions.length,
     totalFocusSeconds,
     totalAwardedXp,
-    lastStudiedAt: book.lastStudiedAt ?? lastSessionAt,
+    lastStudiedAt:
+      book.lastStudiedAt === undefined
+        ? lastSessionAt
+        : lastSessionAt === undefined
+          ? book.lastStudiedAt
+          : Math.max(book.lastStudiedAt, lastSessionAt),
   };
 };
 
@@ -63,7 +68,19 @@ export const formatRelativeStudyDate = (
     return "Henüz çalışılmadı";
   }
 
-  const diffDays = Math.floor((now - timestamp) / 86_400_000);
+  const viewedAt = new Date(now);
+  const studiedAt = new Date(timestamp);
+  const viewedDay = new Date(
+    viewedAt.getFullYear(),
+    viewedAt.getMonth(),
+    viewedAt.getDate(),
+  ).getTime();
+  const studiedDay = new Date(
+    studiedAt.getFullYear(),
+    studiedAt.getMonth(),
+    studiedAt.getDate(),
+  ).getTime();
+  const diffDays = Math.round((viewedDay - studiedDay) / 86_400_000);
 
   if (diffDays <= 0) {
     return "Bugün";

@@ -379,7 +379,8 @@ export const normalizeItemsForCostumes = (
       legacySkin && legacySkin !== "classic"
         ? legacyBookSkinCostumeMap[legacySkin]
         : undefined;
-    const defaultCostumeId = getDefaultCostumeId(item.kind);
+    const defaultCostumeId =
+      wardrobe.defaultCostumeByKind[item.kind] ?? getDefaultCostumeId(item.kind);
     const nextCostumeId =
       item.costumeId === defaultCostumeId
         ? undefined

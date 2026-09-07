@@ -1,6 +1,7 @@
 import { resolveResizeLayout, validateGridLayout } from "@/lib/gridLogic";
 import {
   DEFAULT_SHELF_ROWS,
+  ensureShelfTimers,
   GRID_COLUMN_COUNT,
   LIBRARY_SCHEMA_VERSION,
   SIDE_COLUMN_SLOT_COUNT,
@@ -101,14 +102,15 @@ export const normalizeLibraryStateForRuntime = (
   });
   const shelves = shelvesChanged ? normalizedShelves : state.shelves;
 
+  const itemsWithTimers = ensureShelfTimers(shelves, state.items);
   const slotScaledItems =
     state.sideColumnSlotCount !== SIDE_COLUMN_SLOT_COUNT
       ? scaleSideColumnSlots(
-          state.items,
+          itemsWithTimers,
           state.sideColumnSlotCount ?? LEGACY_SIDE_COLUMN_SLOT_COUNT,
           SIDE_COLUMN_SLOT_COUNT,
         )
-      : state.items;
+      : itemsWithTimers;
   const columnScaledItems =
     state.shelfColumnCount !== GRID_COLUMN_COUNT
       ? scaleShelfColumns(
@@ -198,14 +200,25 @@ export const normalizeLibraryStateForRuntime = (
     };
   });
   const tasks = tasksChanged ? normalizedTasks : state.tasks;
-  const activeFocusSession =
-    state.activeFocusSession === undefined ? null : state.activeFocusSession;
+  const activeFocusSession = state.activeFocusSession
+    ? state.activeFocusSession.status &&
+      typeof state.activeFocusSession.accumulatedSeconds === "number"
+      ? state.activeFocusSession
+      : {
+          ...state.activeFocusSession,
+          status: "paused" as const,
+          accumulatedSeconds: 0,
+          resumedAt: undefined,
+          needsRestart: true,
+        }
+    : null;
   const focusSessions = state.focusSessions ?? [];
   const archivedBooks = state.archivedBooks ?? [];
 
   changed =
     changed ||
     shelvesChanged ||
+    itemsWithTimers !== state.items ||
     slotScaledItems !== state.items ||
     designNormalizedItems !== slotScaledItems ||
     costumeNormalized.items !== designNormalizedItems ||
@@ -219,6 +232,7 @@ export const normalizeLibraryStateForRuntime = (
     state.shelfColumnCount !== GRID_COLUMN_COUNT ||
     state.sideColumnSlotCount !== SIDE_COLUMN_SLOT_COUNT ||
     state.activeFocusSession === undefined ||
+    activeFocusSession !== state.activeFocusSession ||
     state.focusSessions === undefined ||
     state.archivedBooks === undefined;
 
