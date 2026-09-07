@@ -2,7 +2,17 @@
 
 İnceleme tarihi: 7 Eylül 2026.
 
-Proje masaüstünde çalışan, yerel veri saklayan bir prototip/MVP aşamasında. Görsel kütüphane, kitap notları ve ödül sistemi mevcut; fakat zamanlayıcı doğruluğu, veri güvenilirliği ve mobil kullanım için düzeltmeler gerekiyor. Derlenebilir olması, bu davranışların doğru olduğu anlamına gelmiyor.
+## Düzeltme sonrası güncel durum
+
+Rapordaki 10 hata grubu `codex/fix-audit-findings` dalında kapatıldı. Sayaç artık gerçek zamana ve kalıcı oturum durumuna dayanıyor; erken bitiş ödülsüz gerçek süre kaydı oluşturuyor; doğal bitiş oturum kimliğiyle yalnız bir kez ödüllendiriliyor. Veriler işlemsel IndexedDB katmanında tutuluyor, sekmeler eşitleniyor ve JSON yedekleme/geri yükleme mevcut.
+
+Mobil raf 360, 390 ve 768 piksel genişliklerde okunabilir ölçüyü koruyarak yatay kayıyor. Alt kontroller çakışmıyor ve görev paneli 50 kayıtta içeriden kaydırılıyor. Geçersiz sürükleme, Classic kostüm seçimi, kalıcı raf saati ve yerel takvim tarihi için regresyon testleri eklendi.
+
+Son doğrulama: 13 otomatik test, ESLint, TypeScript ve Next.js 16.3.4 üretim derlemesi geçti; `npm audit` 0 açık bildirdi. Geliştirme tarayıcısında çalışan/duraklatılmış sayaç yenilemesi, erken bitiş, iki sekmeli tek doğal ödül, not çakışması, 50 görev ve yedekten geri yükleme canlı olarak kontrol edildi. Aşağıdaki bölümler düzeltme öncesi denetim kaydını korur.
+
+## Düzeltme öncesi denetim kaydı
+
+Proje masaüstünde çalışan, yerel veri saklayan bir prototip/MVP aşamasındaydı. Görsel kütüphane, kitap notları ve ödül sistemi mevcuttu; zamanlayıcı doğruluğu, veri güvenilirliği ve mobil kullanım için aşağıdaki düzeltmeler gerekiyordu.
 
 ## Doğrulama kapsamı
 
