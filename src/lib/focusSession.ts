@@ -23,6 +23,8 @@ export const normalizeFocusSession = (
     Number.isFinite(session.accumulatedSeconds) &&
     Number.isFinite(session.durationSeconds) &&
     session.durationSeconds > 0 &&
+    session.accumulatedSeconds >= 0 &&
+    session.accumulatedSeconds <= session.durationSeconds &&
     isValidTimestamp(session.startedAt) &&
     (session.status !== "running" || isValidTimestamp(session.resumedAt));
 
@@ -51,19 +53,7 @@ export const normalizeFocusSession = (
     };
   }
 
-  const accumulatedSeconds = clampElapsed(
-    session.accumulatedSeconds ?? 0,
-    session.durationSeconds,
-  );
-  if (accumulatedSeconds === session.accumulatedSeconds) {
-    return session as NormalizedFocusSession;
-  }
-
-  return {
-    ...session,
-    status: session.status!,
-    accumulatedSeconds,
-  };
+  return session as NormalizedFocusSession;
 };
 
 export const getFocusElapsedSeconds = (

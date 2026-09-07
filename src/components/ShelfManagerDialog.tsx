@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LibraryDialog } from "@/components/LibraryDialog";
 import { Archive, BookOpen, ChevronRight, Trash2, X } from "lucide-react";
 import type { ArchivedBook, LibraryShelf } from "@/types/library";
@@ -10,24 +10,63 @@ type ShelfManagerDialogProps = {
   activeShelfId: string;
   archivedBooks: ArchivedBook[];
   shelves: LibraryShelf[];
+  recoveryActions?: ReactNode;
   onClose: () => void;
-  onDeleteShelf: (shelfId: string) => void;
-  onRestoreBook: (bookId: string) => void;
-  onSelectShelf: (shelfId: string) => void;
+  onDeleteShelf: (shelfId: string) => Promise<boolean>;
+  onRestoreBook: (bookId: string) => Promise<boolean>;
+  onSelectShelf: (shelfId: string) => Promise<boolean>;
 };
 
 export const ShelfManagerDialog = ({
   activeShelfId,
   archivedBooks,
   shelves,
+  recoveryActions,
   onClose,
   onDeleteShelf,
   onRestoreBook,
   onSelectShelf,
 }: ShelfManagerDialogProps) => {
   const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const pendingShelf = shelves.find((shelf) => shelf.id === pendingDeletionId) ?? null;
   const cancelDeletionRef = useRef<HTMLButtonElement>(null);
+  const deletionTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const shelfHeadingRef = useRef<HTMLHeadingElement>(null);
+  const archiveHeadingRef = useRef<HTMLHeadingElement>(null);
+  const saveErrorRef = useRef<HTMLParagraphElement>(null);
+  const actionInFlightRef = useRef(false);
+
+  const cancelDeletion = () => {
+    setPendingDeletionId(null);
+    deletionTriggerRef.current?.focus();
+  };
+
+  const requestClose = () => {
+    if (actionInFlightRef.current) return;
+    if (pendingShelf) cancelDeletion();
+    else onClose();
+  };
+
+  const saveChange = async (action: () => Promise<boolean>, onSuccess: () => void) => {
+    if (actionInFlightRef.current) return;
+    actionInFlightRef.current = true;
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      if (await action()) {
+        onSuccess();
+      } else {
+        setSaveError("Değişiklik kaydedilemedi. Yeniden deneyebilirsin.");
+      }
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Değişiklik kaydedilemedi. Yeniden deneyebilirsin.");
+    } finally {
+      actionInFlightRef.current = false;
+      setIsSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (pendingDeletionId) {
@@ -35,14 +74,19 @@ export const ShelfManagerDialog = ({
     }
   }, [pendingDeletionId]);
 
+  useEffect(() => {
+    if (saveError) saveErrorRef.current?.focus();
+  }, [saveError]);
+
   return (
     <LibraryDialog
       aria-labelledby="shelf-manager-title"
       className="fixed inset-0 z-[75] flex items-end bg-[#140f0b]/76 p-3 backdrop-blur-sm sm:items-center sm:justify-center sm:p-5"
-      onClose={pendingShelf ? () => setPendingDeletionId(null) : onClose}
+      onClose={requestClose}
     >
       <section
-        className={`flex max-h-[min(760px,calc(100dvh-1.5rem))] w-full max-w-2xl flex-col overflow-hidden rounded-md border shadow-2xl shadow-black/45 ${libraryTheme.current.panel}`}
+        aria-busy={isSaving}
+        className={`flex max-h-[min(760px,calc(100dvh-1.5rem))] w-full min-w-0 max-w-2xl flex-col overflow-hidden rounded-md border shadow-2xl shadow-black/45 sm:max-h-[min(760px,calc(100dvh-2.5rem))] ${libraryTheme.current.panel}`}
       >
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#bba88c] px-4 py-4 sm:px-6">
           <div>
@@ -61,17 +105,22 @@ export const ShelfManagerDialog = ({
             aria-label="Raf yönetimini kapat"
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] ${libraryTheme.current.secondaryButton} ${libraryTheme.current.focusRing}`}
             type="button"
-            onClick={onClose}
+            disabled={isSaving}
+            onClick={requestClose}
           >
             <X aria-hidden className="h-5 w-5" />
           </button>
         </header>
 
         <div className="min-h-0 space-y-6 overflow-y-auto px-4 py-5 sm:px-6">
+          {recoveryActions}
+          {saveError ? (
+            <p ref={saveErrorRef} role="alert" tabIndex={-1} className="break-words rounded-md border border-[#d69b87] bg-[#f9e1d8] p-3 text-sm text-[#6a3727]">{saveError}</p>
+          ) : null}
           <section aria-labelledby="shelf-list-title">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h3 id="shelf-list-title" className="font-bold text-[#2f251b]">Raflar</h3>
+                <h3 ref={shelfHeadingRef} id="shelf-list-title" tabIndex={-1} className="font-bold text-[#2f251b]">Raflar</h3>
                 <p className="text-sm text-[#6e5c47]">Bir rafa geçmek için satırına tıkla.</p>
               </div>
               <span className="rounded-full bg-[#d2c0a1] px-2.5 py-1 text-xs font-semibold text-[#4a3b2c]">
@@ -96,10 +145,10 @@ export const ShelfManagerDialog = ({
                     <button
                       aria-current={isActive ? "true" : undefined}
                       className="min-w-0 flex flex-1 items-center gap-3 rounded-[3px] px-2 py-2 text-left"
+                      disabled={isSaving}
                       type="button"
                       onClick={() => {
-                        onSelectShelf(shelf.id);
-                        onClose();
+                        void saveChange(() => onSelectShelf(shelf.id), onClose);
                       }}
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[3px] bg-[#8a6040] text-sm font-bold text-amber-50">
@@ -116,10 +165,13 @@ export const ShelfManagerDialog = ({
                     <button
                       aria-label={`${shelf.title} rafını sil`}
                       className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-[#c88b73] text-[#a3482d] transition hover:bg-[#f9e1d8] disabled:cursor-not-allowed disabled:border-[#d7c6ad] disabled:text-[#b6a894]"
-                      disabled={!canDelete}
+                      disabled={!canDelete || isSaving}
                       title={canDelete ? "Rafı sil" : "Son raf silinemez"}
                       type="button"
-                      onClick={() => setPendingDeletionId(shelf.id)}
+                      onClick={(event) => {
+                        deletionTriggerRef.current = event.currentTarget;
+                        setPendingDeletionId(shelf.id);
+                      }}
                     >
                       <Trash2 aria-hidden className="h-4 w-4" />
                     </button>
@@ -129,7 +181,7 @@ export const ShelfManagerDialog = ({
             </div>
 
             {pendingShelf ? (
-              <div className="mt-3 rounded-md border border-[#d69b87] bg-[#f9e1d8] p-3 text-sm text-[#6a3727]" role="alert">
+              <div className="mt-3 break-words rounded-md border border-[#d69b87] bg-[#f9e1d8] p-3 text-sm text-[#6a3727]" role="alert">
                 <p>
                   <strong>{pendingShelf.title}</strong> silinsin mi? İçindeki kitaplar Depo’ya taşınır;
                   saat ve dekor öğeleri kaldırılır.
@@ -138,18 +190,21 @@ export const ShelfManagerDialog = ({
                   <button
                     ref={cancelDeletionRef}
                     className={`h-9 rounded-[4px] px-3 text-sm font-semibold ${libraryTheme.current.secondaryButton} ${libraryTheme.current.focusRing}`}
+                    disabled={isSaving}
                     type="button"
-                    onClick={() => setPendingDeletionId(null)}
+                    onClick={cancelDeletion}
                   >
                     Vazgeç
                   </button>
                   <button
                     className="h-9 rounded-[4px] bg-[#a3482d] px-3 text-sm font-semibold text-white transition hover:bg-[#883a24] disabled:opacity-50"
-                    disabled={shelves.length <= 1}
+                    disabled={shelves.length <= 1 || isSaving}
                     type="button"
                     onClick={() => {
-                      onDeleteShelf(pendingShelf.id);
-                      setPendingDeletionId(null);
+                      void saveChange(() => onDeleteShelf(pendingShelf.id), () => {
+                        setPendingDeletionId(null);
+                        shelfHeadingRef.current?.focus({ preventScroll: true });
+                      });
                     }}
                   >
                     Rafı sil
@@ -162,7 +217,7 @@ export const ShelfManagerDialog = ({
           <section aria-labelledby="archive-title" className="border-t border-[#d7c6ad] pt-5">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h3 id="archive-title" className="font-bold text-[#2f251b]">Kitap Deposu</h3>
+                <h3 ref={archiveHeadingRef} id="archive-title" tabIndex={-1} className="font-bold text-[#2f251b]">Kitap Deposu</h3>
                 <p className="text-sm text-[#6e5c47]">Depodaki kitaplar silinmez; istediğin zaman aktif rafa döner.</p>
               </div>
               <span className="rounded-full bg-[#d2c0a1] px-2.5 py-1 text-xs font-semibold text-[#4a3b2c]">
@@ -186,8 +241,12 @@ export const ShelfManagerDialog = ({
                     </span>
                     <button
                       className={`h-9 shrink-0 rounded-[4px] px-3 text-sm font-semibold ${libraryTheme.current.primaryButton} ${libraryTheme.current.focusRing}`}
+                      disabled={isSaving}
                       type="button"
-                      onClick={() => onRestoreBook(book.id)}
+                      onClick={() => void saveChange(
+                        () => onRestoreBook(book.id),
+                        () => archiveHeadingRef.current?.focus({ preventScroll: true }),
+                      )}
                     >
                       Aktif rafa al
                     </button>

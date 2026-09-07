@@ -2,9 +2,9 @@ import { LIBRARY_SCHEMA_VERSION } from "@/lib/libraryInventory";
 import { normalizeLibraryStateForRuntime } from "@/lib/libraryStateMigration";
 import type { LibraryState } from "@/types/library";
 
-const invalidBackup = (detail: string): never => {
+function invalidBackup(detail: string): never {
   throw new Error(`Geçersiz kütüphane verisi: ${detail}. Mevcut kayıt değiştirilmedi.`);
-};
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -52,10 +52,15 @@ export const readLibraryState = (value: unknown): LibraryState => {
   }
   if (
     value.schemaVersion !== undefined &&
-    (!isNonNegativeNumber(value.schemaVersion) ||
+    (!isNonNegativeNumber(value.schemaVersion) || !Number.isInteger(value.schemaVersion) ||
       value.schemaVersion > LIBRARY_SCHEMA_VERSION)
   ) {
     invalidBackup("bu yedek desteklenmeyen bir uygulama sürümüne ait");
+  }
+  for (const field of ["shelfColumnCount", "sideColumnSlotCount"]) {
+    if (value[field] !== undefined && (
+      !isNonNegativeNumber(value[field]) || !Number.isInteger(value[field]) || value[field] === 0
+    )) invalidBackup(`${field} pozitif bir tam sayı olmalı`);
   }
 
   const shelves = value.shelves as unknown[];
@@ -94,7 +99,10 @@ export const readLibraryState = (value: unknown): LibraryState => {
     for (const field of ["createdAt", "noteUpdatedAt", "lastStudiedAt", "archivedAt"]) {
       assertTimestamp(item, field);
     }
-    if (item.unlockedSkins !== undefined && !Array.isArray(item.unlockedSkins)) {
+    if (item.unlockedSkins !== undefined && (
+      !Array.isArray(item.unlockedSkins) ||
+      !item.unlockedSkins.every((skin) => typeof skin === "string")
+    )) {
       invalidBackup("kitap kostümleri listesi geçersiz");
     }
   };
@@ -112,6 +120,7 @@ export const readLibraryState = (value: unknown): LibraryState => {
       assertUniqueIds(value[key] as unknown[], key);
     }
   }
+  assertUniqueIds([...items, ...((value.archivedBooks ?? []) as unknown[])], "kitap ve eşya");
   for (const item of (value.archivedBooks ?? []) as unknown[]) validateItem(item, true);
   for (const session of (value.focusSessions ?? []) as Record<string, unknown>[]) {
     for (const field of ["durationSeconds", "awardedXp", "startedAt", "completedAt"]) {
@@ -174,6 +183,9 @@ export const parseLibraryBackup = (rawValue: string): LibraryState => {
   }
   if (!isRecord(parsed) || parsed.app !== "pomodoro-library" || !("data" in parsed)) {
     return invalidBackup("seçilen dosya Pomodoro Library yedeği değil");
+  }
+  if (parsed.version !== 1) {
+    return invalidBackup("bu yedek desteklenmeyen bir dosya sürümüne ait");
   }
   return readLibraryState(parsed.data);
 };

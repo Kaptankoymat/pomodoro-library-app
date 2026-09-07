@@ -25,6 +25,7 @@ export type PersistenceStatus<TValue> = {
   exportData: () => string;
   importData: (rawValue: string) => Promise<TValue>;
   isHydrated: boolean;
+  isReady: boolean;
   retryLastSave: () => Promise<boolean>;
 };
 
@@ -93,6 +94,7 @@ const writeRecord = async <TValue,>(
   key: string,
   action: TValue | ((current: TValue) => TValue),
   fallbackValue: TValue,
+  replacement?: { recoveryValue: unknown },
 ): Promise<StoredRecord<TValue>> => {
   const database = await openDatabase();
 
@@ -105,7 +107,19 @@ const writeRecord = async <TValue,>(
     request.onsuccess = () => {
       try {
         const currentRecord = request.result as StoredRecord<TValue> | undefined;
-        const currentValue = assertImportValue<TValue>(currentRecord?.value ?? fallbackValue);
+        // Preserve the actual current record in the same transaction as import,
+        // including corrupt data that cannot pass runtime validation.
+        if (replacement) {
+          store.put({
+            key: `${key}:pre-import-backup`,
+            revision: currentRecord?.revision ?? 0,
+            updatedAt: Date.now(),
+            value: currentRecord?.value ?? replacement.recoveryValue,
+          });
+        }
+        const currentValue = replacement
+          ? fallbackValue
+          : assertImportValue<TValue>(currentRecord?.value ?? fallbackValue);
         const nextValue = assertImportValue<TValue>(
           typeof action === "function"
             ? (action as (current: TValue) => TValue)(currentValue)
@@ -166,6 +180,8 @@ export const useLocalStorageState = <TValue,>(
   const [value, setValue] = useState<TValue>(initialValue);
   const valueRef = useRef(value);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const [error, setError] = useState<string | null>(null);
   const readyRef = useRef(false);
   const revisionRef = useRef(0);
@@ -226,6 +242,7 @@ export const useLocalStorageState = <TValue,>(
           valueRef.current = record.value;
           revisionRef.current = record.revision;
           readyRef.current = true;
+          setIsReady(true);
           recoveryRawValueRef.current = null;
           setValue(record.value);
           setError(null);
@@ -247,29 +264,32 @@ export const useLocalStorageState = <TValue,>(
     };
     reloadRef.current = load;
 
+    const syncLatestRecord = async () => {
+      if (!readyRef.current) return;
+      try {
+        const record = await readRecord<TValue>(key);
+        if (record && !cancelled && record.revision > revisionRef.current) {
+          const syncedValue = assertImportValue<TValue>(record.value);
+          revisionRef.current = record.revision;
+          valueRef.current = syncedValue;
+          setValue(syncedValue);
+        }
+      } catch (syncError) {
+        if (!cancelled) {
+          setError(`Diğer sekmedeki değişiklik okunamadı: ${getErrorMessage(syncError)}`);
+        }
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void syncLatestRecord();
+    };
     if (channel) {
-      channel.onmessage = async (event: MessageEvent<{ key?: string }>) => {
-        if (event.data?.key !== key) {
-          return;
-        }
-
-        try {
-          const record = await readRecord<TValue>(key);
-          if (record && !cancelled && record.revision > revisionRef.current) {
-            const syncedValue = assertImportValue<TValue>(record.value);
-            revisionRef.current = record.revision;
-            valueRef.current = syncedValue;
-            setValue(syncedValue);
-          }
-        } catch (syncError) {
-          if (!cancelled) {
-            setError(
-              `Diğer sekmedeki değişiklik okunamadı: ${getErrorMessage(syncError)}`,
-            );
-          }
-        }
+      channel.onmessage = (event: MessageEvent<{ key?: string }>) => {
+        if (event.data?.key === key) void syncLatestRecord();
       };
     }
+    window.addEventListener("focus", syncLatestRecord);
+    document.addEventListener("visibilitychange", handleVisibility);
 
     void load();
 
@@ -277,13 +297,27 @@ export const useLocalStorageState = <TValue,>(
       cancelled = true;
       reloadRef.current = null;
       channel?.close();
+      window.removeEventListener("focus", syncLatestRecord);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [initialValue, key]);
 
+  // Serialize local requests so a later success cannot erase a failed action.
+  const enqueueSave = useCallback(<TResult,>(operation: () => Promise<TResult>) => {
+    const result = saveQueueRef.current.then(operation, operation);
+    saveQueueRef.current = result.catch(() => undefined);
+    return result;
+  }, []);
+
   const setStoredValue = useCallback<PersistedStateSetter<TValue>>(
-    async (action) => {
+    (action) => enqueueSave(async () => {
       if (!readyRef.current) {
         setError("Veri yüklenmeden değişiklik yapılamaz. Lütfen kısa bir süre sonra tekrar dene.");
+        return valueRef.current;
+      }
+
+      if (pendingActionRef.current !== null) {
+        setError("Önce kaydedilemeyen değişiklik için Tekrar dene seçeneğini kullan. Bekleyen veriyi Yedekle ile indirebilirsin.");
         return valueRef.current;
       }
 
@@ -318,8 +352,8 @@ export const useLocalStorageState = <TValue,>(
         setError(`Değişiklik kaydedilemedi: ${getErrorMessage(saveError)}`);
         return valueRef.current;
       }
-    },
-    [key],
+    }),
+    [enqueueSave, key],
   );
 
   const exportData = useCallback(
@@ -345,28 +379,30 @@ export const useLocalStorageState = <TValue,>(
   );
 
   const importData = useCallback(
-    async (rawValue: string) => {
-      const importedValue = parseLibraryBackup(rawValue) as TValue;
-      window.localStorage.setItem(
-        `${key}:pre-import-backup:${Date.now()}`,
-        JSON.stringify(valueRef.current),
-      );
-      const record = await writeRecord(key, importedValue, valueRef.current);
+    (rawValue: string) => enqueueSave(async () => {
+      // A backup is a snapshot, not a request to resume/award an old timer.
+      const importedValue = { ...parseLibraryBackup(rawValue), activeFocusSession: null } as TValue;
+      const record = await writeRecord(key, importedValue, valueRef.current, {
+        recoveryValue: recoveryRawValueRef.current ?? valueRef.current,
+      });
       readyRef.current = true;
-      revisionRef.current = record.revision;
+      setIsReady(true);
+      if (record.revision >= revisionRef.current) {
+        revisionRef.current = record.revision;
+        valueRef.current = record.value;
+        setValue(record.value);
+      }
       recoveryRawValueRef.current = null;
-      valueRef.current = record.value;
-      setValue(record.value);
       setError(null);
       pendingActionRef.current = null;
       pendingValueRef.current = null;
       notifyOtherTabs(key, record.revision);
       return record.value;
-    },
-    [key],
+    }),
+    [enqueueSave, key],
   );
 
-  const retryLastSave = useCallback(async () => {
+  const retryLastSave = useCallback(() => enqueueSave(async () => {
     if (!readyRef.current) return await reloadRef.current?.() ?? false;
     const action = pendingActionRef.current;
     if (action === null) {
@@ -378,9 +414,11 @@ export const useLocalStorageState = <TValue,>(
       const record = await writeRecord(key, action, valueRef.current);
       pendingActionRef.current = null;
       pendingValueRef.current = null;
-      valueRef.current = record.value;
-      revisionRef.current = record.revision;
-      setValue(record.value);
+      if (record.revision >= revisionRef.current) {
+        valueRef.current = record.value;
+        revisionRef.current = record.revision;
+        setValue(record.value);
+      }
       setError(null);
       notifyOtherTabs(key, record.revision);
       return true;
@@ -388,7 +426,7 @@ export const useLocalStorageState = <TValue,>(
       setError(`Değişiklik yine kaydedilemedi: ${getErrorMessage(retryError)}`);
       return false;
     }
-  }, [key]);
+  }), [enqueueSave, key]);
 
   return [
     value,
@@ -399,6 +437,7 @@ export const useLocalStorageState = <TValue,>(
       exportData,
       importData,
       isHydrated,
+      isReady,
       retryLastSave,
     },
   ];

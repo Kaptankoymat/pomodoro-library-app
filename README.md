@@ -4,7 +4,7 @@ Pomodoro Library, odak oturumlarını kitap ve raflarla birleştiren yerel bir N
 
 ## Çalıştırma
 
-Node.js 22 veya daha yeni bir sürüm önerilir.
+Node.js 22.13+ veya 24 LTS kullanın (Node.js 26+ da desteklenir).
 
 ```powershell
 npm install
@@ -28,13 +28,25 @@ Hepsini sırayla çalıştırmak için:
 npm run check
 ```
 
+Üretim sürümünü gerçek Chromium tarayıcısında sınamak için:
+
+```powershell
+npx playwright install chromium
+npm run build
+npm run test:e2e
+```
+
+Tarayıcı testleri 3100 portunda üretim sunucusunu açar. İki sekmeli çalışma, sayaç, not/depo, dar ekran, sürükleme ve kayıt/kurtarma akışları kapsanır. CI aynı testleri çalıştırır.
+
 ## Veri saklama ve yedekleme
 
 - Veriler bu tarayıcıda ve cihazda tutulur; hesap veya bulut eşitleme yoktur.
 - Alt raf çubuğundaki **Yedekle** düğmesi sürümlü bir JSON dosyası indirir.
 - **Yükle** düğmesi dosyayı doğrular, içeriğin özetini gösterir ve onaydan sonra mevcut kütüphaneyi değiştirir.
-- İçe aktarma öncesinde mevcut kayıt tarayıcıda bir kurtarma kopyası olarak saklanır.
-- Yazma başarısız olursa uygulama hata gösterir ve son değişikliği yeniden deneme seçeneği sunar.
+- İçe aktarma sırasında mevcut kayıt, aynı IndexedDB işlemi içinde `pomodoro-library-state-v3:pre-import-backup` anahtarında kurtarma kopyası olarak saklanır. Son içe aktarmadan önceki kayıt korunur; bozuk bir kayıt da bu kopyaya dahildir.
+- Yedekteki aktif sayaç durdurulur; yükleme eski bir oturumu otomatik tamamlayıp ödül üretmez.
+- Yazma başarısız olursa uygulama ilk kaydedilemeyen değişikliği korur. Açık penceredeki **Tekrar dene** veya **Yedekle** seçenekleriyle devam edilebilir; daha sonraki işlemler bekleyen kaydı silmez.
+- Kayıt açılamazsa kurtarma ekranı mevcut veriyi indirmeye, yeniden okumaya veya geçerli bir yedek yüklemeye izin verir.
 
 Önceki localStorage sürümünden ilk açılışta otomatik ve tek seferlik geçiş yapılır. Eski ham kayıt `pomodoro-library-state-v3:legacy-backup` anahtarında korunur. Eski sürümden yarım kalmış bir sayaç için süre veya ödül tahmin edilmez; kullanıcı yeni bir çalışma başlatır.
 
