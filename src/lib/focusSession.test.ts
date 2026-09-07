@@ -78,6 +78,8 @@ describe("focus session timekeeping", () => {
   it.each([
     { accumulatedSeconds: Number.NaN },
     { accumulatedSeconds: Number.POSITIVE_INFINITY },
+    { accumulatedSeconds: -1 },
+    { accumulatedSeconds: 1501 },
     { resumedAt: undefined },
     { resumedAt: Number.NaN },
     { startedAt: Number.POSITIVE_INFINITY },

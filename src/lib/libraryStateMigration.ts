@@ -23,7 +23,7 @@ import {
   scaleSideColumnSlots,
 } from "@/lib/sideColumnLogic";
 import { applyStickyTaskSize } from "@/lib/stickyTaskLayout";
-import { isBookItem, type LibraryItem, type LibraryState } from "@/types/library";
+import { isBookItem, type ArchivedBook, type LibraryItem, type LibraryState } from "@/types/library";
 
 const LEGACY_SHELF_COLUMN_COUNT = 24;
 const LEGACY_SIDE_COLUMN_SLOT_COUNT = 5;
@@ -89,7 +89,8 @@ export const normalizeLibraryStateForRuntime = (
   });
   let shelves = shelvesChanged ? normalizedShelves : state.shelves;
 
-  const itemsWithTimers = ensureShelfTimers(shelves, state.items);
+  const archivedItemIds = (state.archivedBooks ?? []).map((book) => book.id);
+  const itemsWithTimers = ensureShelfTimers(shelves, state.items, archivedItemIds);
   const slotScaledItems =
     state.sideColumnSlotCount !== SIDE_COLUMN_SLOT_COUNT
       ? scaleSideColumnSlots(
@@ -149,7 +150,12 @@ export const normalizeLibraryStateForRuntime = (
     }
 
     const repairedItems: LibraryItem[] = [];
-    for (const item of shelfItems) {
+    // Every shelf must retain its timer. Repair it before books, including
+    // legacy timers that were just appended to an already full shelf.
+    const repairOrder = [...shelfItems].sort(
+      (left, right) => Number(right.kind === "timer") - Number(left.kind === "timer"),
+    );
+    for (const item of repairOrder) {
       const position = canPlaceItem(item, repairedItems, getShelfMetrics()).valid
         ? { row: item.row, col: item.col }
         : findNearestValidSlot(item, item, repairedItems, getShelfMetrics());
@@ -184,10 +190,17 @@ export const normalizeLibraryStateForRuntime = (
     if (!position) {
       let suffix = shelves.length + 1;
       while (shelves.some((shelf) => shelf.id === `recovered-shelf-${suffix}`) ||
-        items.some((candidate) => candidate.id === `timer-recovered-shelf-${suffix}`)) {
+        items.some((candidate) => candidate.id === `timer-recovered-shelf-${suffix}`) ||
+        archivedItemIds.includes(`timer-recovered-shelf-${suffix}`)) {
         suffix += 1;
       }
-      overflowShelf = createShelfWithTimer({ id: `recovered-shelf-${suffix}`, index: shelves.length });
+      const recovered = createShelfWithTimer({ id: `recovered-shelf-${suffix}`, index: shelves.length });
+      overflowShelf = {
+        ...recovered,
+        timer: normalizeItemsForCostumes(
+          [recovered.timer], costumeNormalized.wardrobe,
+        ).items[0] as typeof recovered.timer,
+      };
       shelves = [...shelves, overflowShelf.shelf];
       createdTimers.push(overflowShelf.timer);
       position = findNearestValidSlot({ row: 0, col: 0 }, item, [overflowShelf.timer], getShelfMetrics());
@@ -243,7 +256,18 @@ export const normalizeLibraryStateForRuntime = (
     haveSameFields(normalizedSession, state.activeFocusSession)
     ? state.activeFocusSession : normalizedSession;
   const focusSessions = state.focusSessions ?? [];
-  const archivedBooks = state.archivedBooks ?? [];
+  const originalArchivedBooks = state.archivedBooks ?? [];
+  const normalizedArchive = normalizeItemsForCostumes(
+    normalizeLibraryItemDesigns(originalArchivedBooks),
+    costumeNormalized.wardrobe,
+  );
+  let archivedBooks = normalizedArchive.items.map((book, index) => {
+    const original = originalArchivedBooks[index];
+    return haveSameFields(original, book) ? original : book as ArchivedBook;
+  });
+  if (archivedBooks.every((book, index) => book === originalArchivedBooks[index])) {
+    archivedBooks = originalArchivedBooks;
+  }
 
   const activeShelfId = shelves.some((shelf) => shelf.id === state.activeShelfId)
     ? state.activeShelfId : shelves[0]?.id ?? "";
@@ -253,7 +277,7 @@ export const normalizeLibraryStateForRuntime = (
     tasksChanged ||
     activeShelfId !== state.activeShelfId ||
     selectedFocusItemId !== state.selectedFocusItemId ||
-    !areWardrobeStatesEqual(state.wardrobe, costumeNormalized.wardrobe) ||
+    !areWardrobeStatesEqual(state.wardrobe, normalizedArchive.wardrobe) ||
     state.schemaVersion !== LIBRARY_SCHEMA_VERSION ||
     state.itemDesignVersion !== ITEM_DESIGN_VERSION ||
     state.shelfColumnCount !== GRID_COLUMN_COUNT ||
@@ -261,7 +285,7 @@ export const normalizeLibraryStateForRuntime = (
     state.activeFocusSession === undefined ||
     activeFocusSession !== state.activeFocusSession ||
     state.focusSessions === undefined ||
-    state.archivedBooks === undefined;
+    archivedBooks !== state.archivedBooks;
 
   if (!changed) {
     return state;
@@ -278,7 +302,7 @@ export const normalizeLibraryStateForRuntime = (
     activeFocusSession,
     focusSessions,
     selectedFocusItemId,
-    wardrobe: costumeNormalized.wardrobe,
+    wardrobe: normalizedArchive.wardrobe,
     itemDesignVersion: ITEM_DESIGN_VERSION,
     shelfColumnCount: GRID_COLUMN_COUNT,
     sideColumnSlotCount: SIDE_COLUMN_SLOT_COUNT,

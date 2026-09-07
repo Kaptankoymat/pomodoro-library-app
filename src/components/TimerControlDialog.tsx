@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LibraryDialog } from "@/components/LibraryDialog";
 import {
   BookOpen,
@@ -19,16 +20,18 @@ type TimerControlDialogProps = {
   isSelectingBook: boolean;
   rewardSummary: FocusRewardSummary | null;
   recoveryMessage?: string;
+  errorMessage?: string;
+  recoveryActions?: ReactNode;
   selectedBook: BookItem | null;
   timerText: string;
   onClearReward: () => void;
-  onClearTarget: () => void;
+  onClearTarget: () => Promise<boolean>;
   onClose: () => void;
-  onFinish: () => void;
-  onPause: () => void;
+  onFinish: () => Promise<boolean>;
+  onPause: () => Promise<boolean>;
   onRequestBookSelection: () => void;
-  onReset: () => void;
-  onStart: () => void;
+  onReset: () => Promise<boolean>;
+  onStart: () => Promise<boolean>;
 };
 
 const getRewardMessage = (rewardSummary: FocusRewardSummary | null): string | null => {
@@ -64,6 +67,8 @@ export const TimerControlDialog = ({
   isSelectingBook,
   rewardSummary,
   recoveryMessage,
+  errorMessage,
+  recoveryActions,
   selectedBook,
   timerText,
   onClearReward,
@@ -75,6 +80,33 @@ export const TimerControlDialog = ({
   onReset,
   onStart,
 }: TimerControlDialogProps) => {
+  const [isSaving, setIsSaving] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const actionInFlightRef = useRef(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const visibleError = actionError || errorMessage;
+
+  const saveChange = async (action: () => Promise<boolean>) => {
+    if (actionInFlightRef.current) return;
+    actionInFlightRef.current = true;
+    setIsSaving(true);
+    setActionError("");
+    try {
+      if (!await action()) {
+        setActionError("Saatteki değişiklik kaydedilemedi. Yeniden deneyebilirsin.");
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Saatteki değişiklik kaydedilemedi. Yeniden deneyebilirsin.");
+    } finally {
+      actionInFlightRef.current = false;
+      setIsSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (visibleError) errorRef.current?.focus();
+  }, [visibleError]);
+
   const dailyProgress = Math.round(
     (Math.min(Math.max(dailyXp, 0), DAILY_XP_LIMIT) / DAILY_XP_LIMIT) * 100,
   );
@@ -93,7 +125,8 @@ export const TimerControlDialog = ({
       onClose={onClose}
     >
       <section
-        className="relative my-auto grid w-full max-w-xl shrink-0 gap-5 rounded-lg border-x-2 border-t-2 border-b-[4px] border-[#6a3b20] bg-[#8a5a35] p-4 shadow-[0_16px_32px_rgba(0,0,0,0.8),inset_0_2px_4px_rgba(255,255,255,0.1)] sm:p-6"
+        aria-busy={isSaving}
+        className="relative my-auto grid w-full min-w-0 max-w-xl shrink-0 gap-5 rounded-lg border-x-2 border-t-2 border-b-[4px] border-[#6a3b20] bg-[#8a5a35] p-4 shadow-[0_16px_32px_rgba(0,0,0,0.8),inset_0_2px_4px_rgba(255,255,255,0.1)] sm:p-6"
         style={{ backgroundImage: 'url(/lofi_shelf_wood.png)', backgroundSize: '100% 100%', backgroundBlendMode: 'luminosity' }}
       >
         <div className="flex items-start justify-between gap-4">
@@ -118,6 +151,14 @@ export const TimerControlDialog = ({
         {recoveryMessage ? (
           <p role="status" className="rounded-md border border-amber-300/45 bg-[#3a2114]/75 px-3 py-2 text-sm text-amber-50">
             {recoveryMessage}
+          </p>
+        ) : null}
+
+        {recoveryActions}
+
+        {visibleError ? (
+          <p ref={errorRef} role="alert" tabIndex={-1} className="break-words rounded-md border border-[#d69b87] bg-[#f9e1d8] px-3 py-2 text-sm text-[#6a3727]">
+            {visibleError}
           </p>
         ) : null}
 
@@ -181,9 +222,10 @@ export const TimerControlDialog = ({
         <div className="grid grid-cols-[auto_auto_1fr] gap-3 sm:grid-cols-[auto_auto_auto_1fr]">
           <button
             aria-label={isRunning ? "Duraklat" : "Başlat"}
+            disabled={isSaving}
             className="flex h-12 w-12 items-center justify-center rounded-[4px] border-b-[3px] border-[#925f2b] bg-[#c28442] text-[#2a170a] shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#d99b59] hover:brightness-110 active:translate-y-[3px] active:border-b-0 active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
             type="button"
-            onClick={isRunning ? onPause : onStart}
+            onClick={() => void saveChange(isRunning ? onPause : onStart)}
           >
             {isRunning ? (
               <Pause aria-hidden className="h-6 w-6 fill-current" />
@@ -193,23 +235,25 @@ export const TimerControlDialog = ({
           </button>
           <button
             aria-label="Sıfırla"
+            disabled={isSaving}
             className="flex h-12 w-12 items-center justify-center rounded-[4px] border border-[#6a3b20] border-b-[3px] bg-[#6f3f22] text-amber-50 shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#83502c] hover:brightness-110 active:translate-y-[2px] active:border-b border-[#6a3b20] active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
             type="button"
-            onClick={onReset}
+            onClick={() => void saveChange(onReset)}
           >
             <RotateCcw aria-hidden className="h-5 w-5" />
           </button>
           <button
             className="flex h-12 items-center justify-center gap-2 rounded-[4px] border border-[#6a3b20] border-b-[3px] bg-[#6f3f22] px-4 text-sm font-bold uppercase tracking-wider text-[#10b981] shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#83502c] hover:brightness-110 active:translate-y-[2px] active:border-b border-[#6a3b20] active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-45"
-            disabled={!canFinish}
+            disabled={!canFinish || isSaving}
             type="button"
-            onClick={onFinish}
+            onClick={() => void saveChange(onFinish)}
           >
             <Sparkles aria-hidden className="h-4 w-4" />
             Bitir
           </button>
           <button
             aria-pressed={isSelectingBook}
+            disabled={isSaving}
             className={`col-span-3 flex h-12 items-center justify-center gap-2 rounded-[4px] border border-[#6a3b20] border-b-[3px] px-4 text-sm font-bold uppercase tracking-wider text-amber-50 shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all sm:col-span-1 hover:brightness-110 active:translate-y-[2px] active:border-b border-[#6a3b20] active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
               isSelectingBook ? "bg-[#83502c] translate-y-[2px] border-b border-[#6a3b20] shadow-none" : "bg-[#6f3f22] hover:bg-[#83502c]"
             }`}
@@ -225,7 +269,8 @@ export const TimerControlDialog = ({
           <button
             className="h-10 rounded-[4px] border border-[#6a3b20] border-b-[3px] bg-[#8a5a35] text-sm font-bold uppercase tracking-wider text-amber-50 shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#6f3f22] active:translate-y-[2px] active:border-b border-[#6a3b20] active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
             type="button"
-            onClick={onClearTarget}
+            disabled={isSaving}
+            onClick={() => void saveChange(onClearTarget)}
           >
             Yeni kitap kazan
           </button>

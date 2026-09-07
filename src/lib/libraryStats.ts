@@ -32,7 +32,7 @@ export const getBookStudyStats = (
   );
 
   return {
-    totalSessions: bookSessions.length,
+    totalSessions: bookSessions.filter((session) => session.completion !== "ended-early").length,
     totalFocusSeconds,
     totalAwardedXp,
     lastStudiedAt:

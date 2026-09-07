@@ -136,6 +136,42 @@ describe("focus completion", () => {
     expect(result.state.dailyFocus).toEqual({ dateKey: "2026-09-07", xp: 25 });
   });
 
+  it("keeps the daily XP cap when the wall clock returns to a previously studied day", () => {
+    const completedAt = new Date(2026, 8, 7, 20).getTime();
+    const state = {
+      ...getInitialLibraryState(),
+      dailyFocus: { dateKey: "2026-09-08", xp: 25 },
+      focusSessions: Array.from({ length: 8 }, (_, index) => ({
+        id: `previous-${index}`,
+        targetBookId: "book-1",
+        startedAt: completedAt - (index + 2) * 1_500_000,
+        completedAt: completedAt - (index + 1) * 1_500_000,
+        durationSeconds: 1500,
+        awardedXp: 25,
+        completion: "completed" as const,
+      })),
+      activeFocusSession: {
+        ...runningSession,
+        startedAt: completedAt - 1_500_000,
+        resumedAt: completedAt - 1_500_000,
+      },
+    };
+
+    const result = completeNaturalFocusSession({
+      state,
+      sessionId: runningSession.id,
+      completedAt,
+    });
+
+    expect(result.summary).toMatchObject({ awardedXp: 0, capped: true });
+    expect(result.state.dailyFocus).toEqual({ dateKey: "2026-09-07", xp: 200 });
+    expect(result.state.focusSessions).toHaveLength(9);
+    expect(result.state.items.find((item) => item.id === "book-1")).toMatchObject({
+      xp: 0,
+      lastStudiedAt: completedAt,
+    });
+  });
+
   it("clears a just-started session without creating an empty history entry", () => {
     const state = { ...getInitialLibraryState(), activeFocusSession: runningSession };
     const result = endFocusSessionEarly(state, 1_250);
@@ -160,6 +196,8 @@ describe("focus completion", () => {
 
   it.each([
     { accumulatedSeconds: Number.NaN },
+    { accumulatedSeconds: -1 },
+    { accumulatedSeconds: 1501 },
     { durationSeconds: Number.NaN },
     { durationSeconds: 0 },
     { resumedAt: undefined },

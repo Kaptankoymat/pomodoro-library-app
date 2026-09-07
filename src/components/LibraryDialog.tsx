@@ -19,6 +19,7 @@ export const LibraryDialog = ({
   className = "",
   dismissOnBackdrop = false,
   onClose,
+  onKeyDown,
   ...props
 }: LibraryDialogProps) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -57,6 +58,16 @@ export const LibraryDialog = ({
       onCancel={(event) => {
         event.preventDefault();
         onClose();
+      }}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (event.key === "Escape" && !event.defaultPrevented && !event.nativeEvent.isComposing) {
+          // Repeated native Escape requests can become non-cancelable. Keep
+          // dismissal in React so an unsaved draft cannot bypass confirmation.
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }
       }}
       onPointerDown={(event) => {
         startedOnBackdrop.current = event.target === event.currentTarget;

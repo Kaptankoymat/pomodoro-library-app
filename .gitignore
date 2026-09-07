@@ -10,3 +10,6 @@ dev-server.err.log
 *.bak
 old_dialog.tsx
 .env*.local
+
+playwright-report/
+test-results/

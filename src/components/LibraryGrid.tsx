@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MotionConfig, motion, type Transition } from "framer-motion";
+import { motion, type Transition } from "framer-motion";
 import {
   BookOpen,
   Check,
@@ -21,6 +21,7 @@ import {
 import { BookNoteDialog } from "@/components/BookNoteDialog";
 import { LibraryDialog } from "@/components/LibraryDialog";
 import { ShelfManagerDialog } from "@/components/ShelfManagerDialog";
+import { ShelfTitleInput } from "@/components/ShelfTitleInput";
 import { TimerControlDialog } from "@/components/TimerControlDialog";
 import { useGridMetrics } from "@/hooks/useGridMetrics";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
@@ -38,7 +39,6 @@ import {
   getResolvedItemPosition,
   gridToPixel,
   pixelToGridTarget,
-  resolveDrop,
   resolveResizeLayout,
   validateGridLayout,
 } from "@/lib/gridLogic";
@@ -89,6 +89,7 @@ import {
 } from "@/lib/sideColumnLogic";
 import {
   FOCUS_SESSION_SECONDS,
+  getDailyFocusXp,
   getTodayKey,
 } from "@/lib/libraryProgression";
 import {
@@ -100,6 +101,7 @@ import { parseLibraryBackup } from "@/lib/libraryBackup";
 import {
   applyStickyTaskSize,
   getActiveTasks,
+  getStickyTaskGridSize,
   STICKY_VISIBLE_TASK_LIMIT,
 } from "@/lib/stickyTaskLayout";
 import {
@@ -720,6 +722,7 @@ const ShelfScene = ({
   const rightSideColumnRef = useRef<HTMLDivElement | null>(null);
   const activeDragRef = useRef<ActiveDrag | null>(null);
   const pendingDragRef = useRef<ActiveDrag | null>(null);
+  const cancelledPointerIdRef = useRef<number | null>(null);
   const pointerStartRef = useRef<PixelPoint | null>(null);
   const previewKeyRef = useRef<string | null>(null);
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
@@ -808,42 +811,28 @@ const ShelfScene = ({
 
   const resolveDragPreview = useCallback(
     (item: LibraryItem, pointer: PixelPoint, grabOffset: PixelPoint) => {
-      const resolutionItems = isShelfPlacedItem(item)
-        ? renderedItems
-        : [
-            ...renderedItems,
-            {
-              ...item,
-              placement: "shelf" as const,
-              sideSlot: undefined,
-            },
-          ];
+      const shelfSize = item.kind === "sticky" ? getStickyTaskGridSize(tasks) : item;
       const target = getDraggedGridPosition({
         currentPosition: item,
         grabOffset,
         gridElement: gridRef.current,
         pointer,
-        size: item,
+        size: shelfSize,
         metrics,
       });
-      const resolution = resolveDrop(
-        item.id,
-        target,
-        resolutionItems,
-        getShelfMetrics(),
-        {
-          canSwap: (draggedItem, targetItem) =>
-            isBookItem(draggedItem) && isBookItem(targetItem),
-        },
-      );
+      const resolution = resolveLibraryShelfDrop({
+        itemId: item.id,
+        items: [...renderedItems, ...sideColumnItems],
+        position: target,
+        metrics: getShelfMetrics(),
+        shelf,
+        tasks,
+      });
       const state: PlacementPreview["state"] =
         resolution.type === "snap-back" ? "blocked" : resolution.type;
-      const resolvedPosition =
-        getResolvedItemPosition(item.id, resolution) ?? {
-          row: item.row,
-          col: item.col,
-        };
-      const previewKey = `${item.id}:${resolvedPosition.row}:${resolvedPosition.col}:${state}`;
+      const resolvedPosition = resolution.type === "snap-back" ? target
+        : getResolvedItemPosition(item.id, resolution) ?? target;
+      const previewKey = `${item.id}:${resolvedPosition.row}:${resolvedPosition.col}:${shelfSize.widthUnits}:${shelfSize.heightUnits}:${state}`;
 
       if (previewKeyRef.current !== previewKey) {
         previewKeyRef.current = previewKey;
@@ -852,15 +841,15 @@ const ShelfScene = ({
           itemId: item.id,
           row: resolvedPosition.row,
           col: resolvedPosition.col,
-          widthUnits: item.widthUnits,
-          heightUnits: item.heightUnits,
+          widthUnits: shelfSize.widthUnits,
+          heightUnits: shelfSize.heightUnits,
           state,
         });
       }
 
       return target;
     },
-    [metrics, renderedItems],
+    [metrics, renderedItems, shelf, sideColumnItems, tasks],
   );
 
   const getSideColumnTarget = useCallback(
@@ -880,6 +869,7 @@ const ShelfScene = ({
         target,
         items,
         SIDE_COLUMN_SLOT_COUNT,
+        { metrics: getShelfMetrics(), tasks },
       );
       const state: SidePlacementPreview["state"] =
         resolution.type === "snap-back" ? "blocked" : resolution.type;
@@ -898,7 +888,7 @@ const ShelfScene = ({
 
       return isSideColumnEligibleItem(item);
     },
-    [items],
+    [items, tasks],
   );
 
   const updateDragFromPointer = useCallback(
@@ -945,6 +935,13 @@ const ShelfScene = ({
   const finishDragFromPointer = useCallback(
     (pointer: PixelPoint, pointerId?: number): boolean => {
       const pendingDrag = pendingDragRef.current;
+
+      if (!pendingDrag && cancelledPointerIdRef.current !== null &&
+        (pointerId === undefined || pointerId === cancelledPointerIdRef.current)) {
+        cancelledPointerIdRef.current = null;
+        releaseObjectOpenSuppression();
+        return true;
+      }
 
       if (
         !pendingDrag ||
@@ -1003,13 +1000,15 @@ const ShelfScene = ({
   );
 
   const cancelDrag = useCallback(() => {
-    if (!pendingDragRef.current && !activeDragRef.current) {
+    const drag = pendingDragRef.current ?? activeDragRef.current;
+    if (!drag) {
       return;
     }
 
+    cancelledPointerIdRef.current = drag.pointerId;
+    suppressObjectOpenRef.current = true;
     clearDragState();
-    releaseObjectOpenSuppression();
-  }, [clearDragState, releaseObjectOpenSuppression]);
+  }, [clearDragState]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -1045,12 +1044,24 @@ const ShelfScene = ({
         y: event.clientY,
       });
     };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && pendingDragRef.current) {
+        event.preventDefault();
+        cancelDrag();
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) cancelDrag();
+    };
 
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
     window.addEventListener("pointercancel", cancelDrag);
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("blur", cancelDrag);
+    window.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
@@ -1058,6 +1069,9 @@ const ShelfScene = ({
       window.removeEventListener("pointercancel", cancelDrag);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("blur", cancelDrag);
+      window.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [cancelDrag, finishDragFromPointer, updateDragFromPointer]);
 
@@ -1252,6 +1266,7 @@ const ShelfScene = ({
                       const itemRect = event.currentTarget.getBoundingClientRect();
 
                       suppressObjectOpenRef.current = false;
+                      cancelledPointerIdRef.current = null;
                       pointerStartRef.current = pointer;
                       pendingDragRef.current = {
                         item,
@@ -1300,8 +1315,9 @@ const ShelfScene = ({
 
                       cancelDrag();
                     }}
-                    onClick={() => {
-                      if (suppressObjectOpenRef.current) {
+                    onLostPointerCapture={cancelDrag}
+                    onClick={(event) => {
+                      if (suppressObjectOpenRef.current && event.detail !== 0) {
                         return;
                       }
 
@@ -1527,6 +1543,7 @@ const ShelfScene = ({
                   const itemRect = event.currentTarget.getBoundingClientRect();
 
                   suppressObjectOpenRef.current = false;
+                  cancelledPointerIdRef.current = null;
                   pointerStartRef.current = pointer;
                   pendingDragRef.current = {
                     item,
@@ -1575,8 +1592,9 @@ const ShelfScene = ({
 
                   cancelDrag();
                 }}
-                onClick={() => {
-                  if (suppressObjectOpenRef.current) {
+                onLostPointerCapture={cancelDrag}
+                onClick={(event) => {
+                  if (suppressObjectOpenRef.current && event.detail !== 0) {
                     return;
                   }
 
@@ -1709,9 +1727,10 @@ type TaskModalProps = {
   onAddTask: (title: string) => Promise<boolean>;
   onClose: () => void;
   onToggleTask: (taskId: string) => void;
+  recoveryActions?: React.ReactNode;
 };
 
-const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask }: TaskModalProps) => {
+const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask, recoveryActions }: TaskModalProps) => {
   const [draftTask, setDraftTask] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1777,6 +1796,7 @@ const TaskModal = ({ tasks, onAddTask, onClose, onToggleTask }: TaskModalProps) 
             </button>
           </form>
 
+          {recoveryActions}
           {saveError ? <p role="alert" className="text-sm text-red-800">{saveError}</p> : null}
           {tasks.length === 0 ? <p className="text-sm text-[#6e5c47]">İlk görevini ekleyerek başlayabilirsin.</p> : null}
           <div className="grid gap-2">
@@ -2131,12 +2151,7 @@ export const LibraryGrid = () => {
   const [wardrobeScope, setWardrobeScope] = useState<WardrobeScope>("item");
   const [pendingCostumeId, setPendingCostumeId] = useState<CostumeId | null>(null);
   const [storageNotice, setStorageNotice] = useState<string | null>(null);
-  const selectedNoteBaselineRef = useRef<{
-    id: string;
-    note?: string;
-    noteUpdatedAt?: number;
-    title: string;
-  } | null>(null);
+  const [selectedNoteBaseline, setSelectedNoteBaseline] = useState<BookItem | null>(null);
   const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeShelf =
@@ -2157,8 +2172,9 @@ export const LibraryGrid = () => {
   );
   const books = useMemo(() => getBooks(libraryState.items), [libraryState.items]);
   const selectedNoteBook = useMemo(
-    () => books.find((book) => book.id === selectedNoteBookId) ?? null,
-    [books, selectedNoteBookId],
+    () => books.find((book) => book.id === selectedNoteBookId) ??
+      (selectedNoteBaseline?.id === selectedNoteBookId ? selectedNoteBaseline : null),
+    [books, selectedNoteBaseline, selectedNoteBookId],
   );
   const selectedNoteBookStats = useMemo(
     () =>
@@ -2174,10 +2190,7 @@ export const LibraryGrid = () => {
         : null,
     [books, libraryState.selectedFocusItemId],
   );
-  const currentDailyXp =
-    libraryState.dailyFocus.dateKey === getTodayKey()
-      ? libraryState.dailyFocus.xp
-      : 0;
+  const currentDailyXp = getDailyFocusXp(libraryState);
   const selectedWardrobeItem = useMemo(() => {
     if (!selectedWardrobeItemId) {
       return null;
@@ -2235,7 +2248,9 @@ export const LibraryGrid = () => {
       return null;
     }
 
-    const size = getCostumeGridSize(selectedWardrobeItem.kind, pendingCostume);
+    const size = selectedWardrobeItem.kind === "sticky"
+      ? { widthUnits: selectedWardrobeItem.widthUnits, heightUnits: selectedWardrobeItem.heightUnits }
+      : getCostumeGridSize(selectedWardrobeItem.kind, pendingCostume);
 
     return {
       itemId: selectedWardrobeItem.id,
@@ -2345,60 +2360,66 @@ export const LibraryGrid = () => {
 
   const timerText = formatTimer(timer.remainingSeconds);
 
-  const startFocusTimer = useCallback(() => {
+  const observedSessionId = libraryState.activeFocusSession?.id ?? null;
+  const startFocusTimer = useCallback(async () => {
     const now = Date.now();
     const sessionId = createLibraryId("focus");
-
-    void setLibraryState((currentState) => ({
-      ...currentState,
-      activeFocusSession: startOrResumeFocusSession({
-        current: currentState.activeFocusSession,
-        durationSeconds: FOCUS_SESSION_SECONDS,
-        id: sessionId,
-        now,
-        targetBookId: currentState.selectedFocusItemId ?? null,
-      }),
-    }));
-  }, [setLibraryState]);
+    const saved = await setLibraryState((currentState) => {
+      if ((currentState.activeFocusSession?.id ?? null) !== observedSessionId) return currentState;
+      return {
+        ...currentState,
+        activeFocusSession: startOrResumeFocusSession({
+          current: currentState.activeFocusSession,
+          durationSeconds: FOCUS_SESSION_SECONDS,
+          id: sessionId,
+          now,
+          targetBookId: currentState.selectedFocusItemId ?? null,
+        }),
+      };
+    });
+    return saved.activeFocusSession?.status === "running" &&
+      [observedSessionId, sessionId].includes(saved.activeFocusSession.id);
+  }, [observedSessionId, setLibraryState]);
 
   const pauseFocusTimer = useCallback(async () => {
     const now = Date.now();
-    const saved = await setLibraryState((currentState) => ({
-      ...currentState,
-      activeFocusSession: currentState.activeFocusSession
-        ? pauseFocusSession(currentState.activeFocusSession, now)
-        : null,
-    }));
+    const saved = await setLibraryState((currentState) => {
+      if (!observedSessionId || currentState.activeFocusSession?.id !== observedSessionId) return currentState;
+      return { ...currentState, activeFocusSession: pauseFocusSession(currentState.activeFocusSession, now) };
+    });
+    if (saved.activeFocusSession?.id !== observedSessionId) return false;
     if (saved.activeFocusSession && getFocusElapsedSeconds(saved.activeFocusSession, now) >= saved.activeFocusSession.durationSeconds) {
-      await completeSession(saved.activeFocusSession.id);
+      return await completeSession(saved.activeFocusSession.id);
     }
-  }, [completeSession, setLibraryState]);
+    return saved.activeFocusSession?.status === "paused";
+  }, [completeSession, observedSessionId, setLibraryState]);
 
-  const resetFocusTimer = useCallback(() => {
-    void setLibraryState((currentState) => ({
-      ...currentState,
-      activeFocusSession: null,
-    }));
-  }, [setLibraryState]);
+  const resetFocusTimer = useCallback(async () => {
+    const saved = await setLibraryState((currentState) =>
+      (currentState.activeFocusSession?.id ?? null) !== observedSessionId
+        ? currentState : { ...currentState, activeFocusSession: null });
+    return !saved.activeFocusSession;
+  }, [observedSessionId, setLibraryState]);
 
   const finishFocusTimer = useCallback(async () => {
     const completedAt = Date.now();
     let summary: FocusRewardSummary | null = null;
-    let completedId: string | null = null;
+    let endedObservedSession = false;
     const saved = await setLibraryState((currentState) => {
       const session = currentState.activeFocusSession;
-      if (session && getFocusElapsedSeconds(session, completedAt) >= session.durationSeconds) {
+      if (!observedSessionId || session?.id !== observedSessionId) return currentState;
+      endedObservedSession = true;
+      if (getFocusElapsedSeconds(session, completedAt) >= session.durationSeconds) {
         const result = completeNaturalFocusSession({ state: currentState, sessionId: session.id, completedAt });
         summary = result.summary;
-        completedId = session.id;
         return result.state;
       }
       return endFocusSessionEarly(currentState, completedAt);
     });
-    if (summary && saved.focusSessions?.some((session) => session.id === completedId)) {
-      setRewardSummary(summary);
-    }
-  }, [setLibraryState]);
+    const completed = Boolean(saved.focusSessions?.some((session) => session.id === observedSessionId));
+    if (summary && completed) setRewardSummary(summary);
+    return completed || (endedObservedSession && !saved.activeFocusSession);
+  }, [observedSessionId, setLibraryState]);
 
   const selectFocusBook = useCallback(
     (bookId: string) => {
@@ -2406,7 +2427,8 @@ export const LibraryGrid = () => {
         ...currentState,
         selectedBookId: bookId,
         selectedFocusItemId: bookId,
-        activeFocusSession: currentState.activeFocusSession
+        activeFocusSession: currentState.activeFocusSession &&
+          getFocusElapsedSeconds(currentState.activeFocusSession) < currentState.activeFocusSession.durationSeconds
           ? {
               ...currentState.activeFocusSession,
               targetBookId: bookId,
@@ -2419,12 +2441,13 @@ export const LibraryGrid = () => {
     [setLibraryState],
   );
 
-  const clearFocusTarget = useCallback(() => {
-    setLibraryState((currentState) => ({
+  const clearFocusTarget = useCallback(async () => {
+    const saved = await setLibraryState((currentState) => ({
       ...currentState,
       selectedBookId: null,
       selectedFocusItemId: null,
-      activeFocusSession: currentState.activeFocusSession
+      activeFocusSession: currentState.activeFocusSession &&
+        getFocusElapsedSeconds(currentState.activeFocusSession) < currentState.activeFocusSession.durationSeconds
         ? {
             ...currentState.activeFocusSession,
             targetBookId: null,
@@ -2432,6 +2455,7 @@ export const LibraryGrid = () => {
         : currentState.activeFocusSession,
     }));
     setIsFocusTargetSelectionMode(false);
+    return saved.selectedFocusItemId === null;
   }, [setLibraryState]);
 
   const closeWardrobe = useCallback(() => {
@@ -2543,32 +2567,24 @@ export const LibraryGrid = () => {
   ]);
 
   const updateActiveShelf = useCallback(
-    (shelfId: string) => {
-      setLibraryState((currentState) => ({
-        ...currentState,
-        activeShelfId: shelfId,
-      }));
+    async (shelfId: string) => {
+      const saved = await setLibraryState((currentState) => currentState.shelves.some((shelf) => shelf.id === shelfId)
+        ? { ...currentState, activeShelfId: shelfId } : currentState);
+      return saved.activeShelfId === shelfId;
     },
     [setLibraryState],
   );
 
   const renameActiveShelf = useCallback(
-    (title: string) => {
-      if (!activeShelf) {
-        return;
-      }
-
-      setLibraryState((currentState) => ({
+    async (title: string) => {
+      if (!activeShelf) return false;
+      const savedTitle = title.trim() || "İsimsiz raf";
+      const saved = await setLibraryState((currentState) => ({
         ...currentState,
         shelves: currentState.shelves.map((shelf) =>
-          shelf.id === activeShelf.id
-            ? {
-                ...shelf,
-                title,
-              }
-            : shelf,
-        ),
+          shelf.id === activeShelf.id ? { ...shelf, title: savedTitle } : shelf),
       }));
+      return saved.shelves.some((shelf) => shelf.id === activeShelf.id && shelf.title === savedTitle);
     },
     [activeShelf, setLibraryState],
   );
@@ -2582,6 +2598,7 @@ export const LibraryGrid = () => {
           metrics: getShelfMetrics(),
           position,
           shelf,
+          tasks: currentState.tasks,
         });
 
         if (resolution.type === "snap-back") {
@@ -2604,6 +2621,7 @@ export const LibraryGrid = () => {
           target,
           currentState.items,
           SIDE_COLUMN_SLOT_COUNT,
+          { metrics: getShelfMetrics(), tasks: currentState.tasks },
         );
 
         if (resolution.type === "snap-back") {
@@ -2624,17 +2642,18 @@ export const LibraryGrid = () => {
   const saveBookNote = useCallback(
     async (bookId: string, data: { title: string; note: string }) => {
       const noteUpdatedAt = Date.now();
-      const openedBook = selectedNoteBaselineRef.current;
+      const openedBook = selectedNoteBaseline;
       let conflict = false;
 
       const saved = await setLibraryState((currentState) => {
         const currentBook = currentState.items.find(
           (item): item is BookItem => item.id === bookId && isBookItem(item),
         );
+        if (currentBook?.title === data.title && (currentBook.note ?? "") === data.note) return currentState;
         if (
-          currentBook &&
-          (openedBook?.id !== bookId || currentBook.title !== openedBook.title ||
-            currentBook.note !== openedBook.note)
+          !currentBook ||
+          openedBook?.id !== bookId || currentBook.title !== openedBook.title ||
+            currentBook.note !== openedBook.note
         ) {
           conflict = true;
           return currentState;
@@ -2656,19 +2675,16 @@ export const LibraryGrid = () => {
       });
 
       if (conflict) {
-        setStorageNotice(
-          "Bu not başka bir sekmede değişti. Taslağın korunuyor; güncel notu görmek için pencereyi kapatıp yeniden aç.",
-        );
-        return false;
+        throw new Error("Bu kitap başka bir sekmede değiştirildi veya kaldırıldı. Taslağın bu pencerede korunuyor. Metni kopyalayıp güncel kitabı yeniden açabilirsin.");
       }
-      const savedBook = saved.items.find((item) => item.id === bookId && isBookItem(item));
+      const savedBook = saved.items.find((item): item is BookItem => item.id === bookId && isBookItem(item));
       if (!savedBook || savedBook.title !== data.title || (savedBook.note ?? "") !== data.note) {
         return false;
       }
       setSelectedNoteBookId(null);
       return true;
     },
-    [setLibraryState],
+    [selectedNoteBaseline, setLibraryState],
   );
 
   const downloadBackup = useCallback(() => {
@@ -2702,7 +2718,11 @@ export const LibraryGrid = () => {
         setIsFocusTargetSelectionMode(false);
         closeWardrobe();
         setRewardSummary(null);
-        setStorageNotice("Yedek doğrulandı ve yüklendi.");
+        setSelectedNoteBookId(null);
+        setIsTimerOpen(false);
+        setIsTaskOpen(false);
+        setIsShelfManagerOpen(false);
+        setStorageNotice("Yedek doğrulandı ve yüklendi. Kaydedilmiş sayaç durduruldu.");
       } catch (error) {
         setStorageNotice(
           error instanceof Error ? error.message : "Yedek yüklenemedi.",
@@ -2737,6 +2757,8 @@ export const LibraryGrid = () => {
     }
 
     setLibraryState((currentState) => {
+      const targetShelf = currentState.shelves.find((shelf) => shelf.id === activeShelf.id);
+      if (!targetShelf) return currentState;
       const normalizedWardrobe = normalizeWardrobeState(currentState.wardrobe);
       const defaultCostume = getCostumeDefinition(
         normalizedWardrobe.defaultCostumeByKind.book,
@@ -2744,7 +2766,7 @@ export const LibraryGrid = () => {
       const target = getShelfItemSlot(
         currentState.items,
         currentState.shelves,
-        activeShelf,
+        targetShelf,
         defaultCostume
           ? getCostumeGridSize("book", defaultCostume)
           : getItemGridSize("book"),
@@ -2778,6 +2800,8 @@ export const LibraryGrid = () => {
       }
 
       setLibraryState((currentState) => {
+        const targetShelf = currentState.shelves.find((shelf) => shelf.id === activeShelf.id);
+        if (!targetShelf) return currentState;
         const normalizedWardrobe = normalizeWardrobeState(currentState.wardrobe);
         const defaultCostume = getCostumeDefinition(
           normalizedWardrobe.defaultCostumeByKind[kind],
@@ -2787,7 +2811,7 @@ export const LibraryGrid = () => {
         if (defaultSidePlacement) {
           const sideSlot = findAvailableSideSlot(
             currentState.items,
-            activeShelf.id,
+            targetShelf.id,
             defaultSidePlacement,
             SIDE_COLUMN_SLOT_COUNT,
           );
@@ -2801,7 +2825,7 @@ export const LibraryGrid = () => {
             const decor = createDecorItem({
               id: createLibraryId(kind),
               kind,
-              shelfId: activeShelf.id,
+              shelfId: targetShelf.id,
               title: titleByKind[kind],
               position: {
                 row: Math.min(sideSlot, DEFAULT_SHELF_ROWS - 1),
@@ -2829,8 +2853,8 @@ export const LibraryGrid = () => {
         const target = getShelfItemSlot(
           currentState.items,
           currentState.shelves,
-          activeShelf,
-          defaultCostume
+          targetShelf,
+          kind === "sticky" ? getStickyTaskGridSize(currentState.tasks) : defaultCostume
             ? getCostumeGridSize(kind, defaultCostume)
             : getItemGridSize(kind),
         );
@@ -2898,7 +2922,7 @@ export const LibraryGrid = () => {
   const archiveBook = useCallback(
     async (bookId: string, data: { title: string; note: string }) => {
       const archivedAt = Date.now();
-      const openedBook = selectedNoteBaselineRef.current;
+      const openedBook = selectedNoteBaseline;
       let conflict = false;
       const saved = await setLibraryState((currentState) => {
         const book = currentState.items.find(
@@ -2906,6 +2930,8 @@ export const LibraryGrid = () => {
         );
 
         if (!book) {
+          if (currentState.archivedBooks?.some((candidate) => candidate.id === bookId && candidate.title === data.title && (candidate.note ?? "") === data.note)) return currentState;
+          conflict = true;
           return currentState;
         }
         if (openedBook?.id !== bookId || book.title !== openedBook.title || book.note !== openedBook.note) {
@@ -2941,19 +2967,18 @@ export const LibraryGrid = () => {
         };
       });
       if (conflict) {
-        setStorageNotice("Bu kitap başka bir sekmede değişti. Taslağın korunuyor; güncel notu kontrol et.");
-        return false;
+        throw new Error("Bu kitap başka bir sekmede değiştirildi veya kaldırıldı. Taslağın bu pencerede korunuyor. Metni kopyalayıp güncel kitabı yeniden açabilirsin.");
       }
       if (!saved.archivedBooks?.some((book) => book.id === bookId && book.title === data.title && (book.note ?? "") === data.note)) return false;
       setSelectedNoteBookId(null);
       return true;
     },
-    [setLibraryState],
+    [selectedNoteBaseline, setLibraryState],
   );
 
   const restoreArchivedBook = useCallback(
-    (bookId: string) => {
-      setLibraryState((currentState) => {
+    async (bookId: string) => {
+      const saved = await setLibraryState((currentState) => {
         const archivedBook = (currentState.archivedBooks ?? []).find(
           (book) => book.id === bookId,
         );
@@ -2992,13 +3017,14 @@ export const LibraryGrid = () => {
           ),
         };
       });
+      return saved.items.some((item) => item.id === bookId);
     },
     [setLibraryState],
   );
 
   const deleteShelf = useCallback(
-    (shelfId: string) => {
-      setLibraryState((currentState) => {
+    async (shelfId: string) => {
+      const saved = await setLibraryState((currentState) => {
         if (currentState.shelves.length <= 1) {
           return currentState;
         }
@@ -3047,6 +3073,7 @@ export const LibraryGrid = () => {
             : activeFocusSession,
         };
       });
+      return !saved.shelves.some((shelf) => shelf.id === shelfId);
     },
     [setLibraryState],
   );
@@ -3089,6 +3116,44 @@ export const LibraryGrid = () => {
     },
     [activeShelfIndex, libraryState.shelves, updateActiveShelf],
   );
+
+  const recoveryActions = persistence.error ? (
+    <div className="flex flex-wrap items-center gap-2 rounded border border-red-700/30 bg-red-50 p-3 text-sm text-red-950" role="alert">
+      <p className="w-full">{persistence.error}</p>
+      <button className="rounded border border-red-900/40 px-3 py-2" type="button" onClick={() => void persistence.retryLastSave()}>Tekrar dene</button>
+      <button className="rounded border border-red-900/40 px-3 py-2" type="button" onClick={downloadBackup}>Yedekle</button>
+    </div>
+  ) : null;
+
+  if (!persistence.isReady) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-[#3a261b] p-6 text-amber-50">
+        <section className="w-full max-w-lg space-y-4 rounded-lg border border-[#8a5a35] bg-[#2b190f] p-6 shadow-xl">
+          <h1 className="font-serif text-2xl">Kütüphane</h1>
+          <p role={persistence.error ? "alert" : "status"}>
+            {persistence.isHydrated
+              ? persistence.error ?? "Kayıt açılamadı. Tekrar deneyebilir veya bir yedek yükleyebilirsin."
+              : "Kütüphanen yükleniyor…"}
+          </p>
+          {persistence.isHydrated ? (
+            <div className="flex flex-wrap gap-3 text-sm">
+              <button className="rounded border border-amber-200/40 px-3 py-2" onClick={() => void persistence.retryLastSave()} type="button">Tekrar dene</button>
+              <button className="rounded border border-amber-200/40 px-3 py-2" onClick={downloadBackup} type="button">Kurtarma verisini indir</button>
+              <label className="cursor-pointer rounded border border-amber-200/40 px-3 py-2">
+                Yedek yükle
+                <input className="sr-only" type="file" accept="application/json,.json" onChange={async (event) => {
+                  const input = event.currentTarget;
+                  if (input.files?.[0]) await importBackup(input.files[0]);
+                  input.value = "";
+                }} />
+              </label>
+            </div>
+          ) : null}
+          {storageNotice ? <p role="status">{storageNotice}</p> : null}
+        </section>
+      </main>
+    );
+  }
 
   if (!activeShelf) {
     return null;
@@ -3134,19 +3199,13 @@ export const LibraryGrid = () => {
         }
         onOpenBook={(bookId) => {
           const book = books.find((candidate) => candidate.id === bookId);
-          selectedNoteBaselineRef.current = book
-            ? {
-                id: book.id,
-                note: book.note,
-                noteUpdatedAt: book.noteUpdatedAt,
-                title: book.title,
-              }
-            : null;
+          setSelectedNoteBaseline(book ?? null);
           setSelectedNoteBookId(bookId);
         }}
         onOpenTasks={() => setIsTaskOpen(true)}
         onOpenTimer={() => {
           setRewardSummary(null);
+          setIsFocusTargetSelectionMode(false);
           setIsTimerOpen(true);
         }}
       >
@@ -3160,15 +3219,11 @@ export const LibraryGrid = () => {
             <ChevronLeft aria-hidden className="h-4 w-4" />
           </button>
 
-          <label className="min-w-0 flex-1">
-            <span className="sr-only">Raf adı</span>
-            <input
-              aria-label="Raf adı"
-              className="h-8 w-full rounded-[2px] border border-[#8b5d37]/55 bg-[#f2dfc3] px-2 text-center text-xs font-bold uppercase tracking-[0.2em] text-[#3b281b] outline-none focus:border-[#6f3f22]"
-              value={activeShelf.title}
-              onChange={(event) => renameActiveShelf(event.target.value)}
-            />
-          </label>
+          <ShelfTitleInput
+            key={activeShelf.id}
+            title={activeShelf.title}
+            onRename={renameActiveShelf}
+          />
 
           <button
             aria-label="Sonraki raf"
@@ -3232,12 +3287,12 @@ export const LibraryGrid = () => {
             </label>
           </div>
 
-          <div className="col-span-3 flex justify-center gap-1 md:ml-1">
+          <div className="col-span-3 flex max-w-full justify-start gap-1 overflow-x-auto py-1 md:ml-1 md:max-w-24">
             {libraryState.shelves.map((shelf) => (
               <button
                 key={shelf.id}
                 aria-label={`${shelf.title} rafına geç`}
-                className={`h-2 w-6 rounded-sm transition border border-[#6a3b20]/55 ${
+                className={`h-2 w-6 shrink-0 rounded-sm transition border border-[#6a3b20]/55 ${
                   shelf.id === activeShelf.id ? "bg-[#f2c078]" : "bg-[#4a2817]/42"
                 }`}
                 type="button"
@@ -3255,6 +3310,7 @@ export const LibraryGrid = () => {
               !libraryState.activeFocusSession.needsRestart &&
               getFocusElapsedSeconds(libraryState.activeFocusSession) >= 1,
           )}
+          recoveryActions={recoveryActions}
           dailyXp={currentDailyXp}
           isRunning={timer.isRunning}
           isSelectingBook={isFocusTargetSelectionMode}
@@ -3269,7 +3325,7 @@ export const LibraryGrid = () => {
           onClearReward={() => setRewardSummary(null)}
           onClearTarget={clearFocusTarget}
           onClose={() => setIsTimerOpen(false)}
-          onFinish={() => void finishFocusTimer()}
+          onFinish={finishFocusTimer}
           onPause={pauseFocusTimer}
           onRequestBookSelection={() => {
             setIsFocusTargetSelectionMode(true);
@@ -3280,6 +3336,13 @@ export const LibraryGrid = () => {
           onReset={resetFocusTimer}
           onStart={startFocusTimer}
         />
+      ) : null}
+
+      {isFocusTargetSelectionMode ? (
+        <div className="fixed inset-x-4 top-24 z-50 mx-auto flex max-w-lg items-center justify-between gap-3 rounded-md border border-amber-200/50 bg-[#2b190f] p-3 text-sm text-amber-50" role="status">
+          <span>Odaklanmak için bir kitap seç.</span>
+          <button className="rounded border border-amber-200/40 px-3 py-2" type="button" onClick={() => { setIsFocusTargetSelectionMode(false); setIsTimerOpen(true); }}>Vazgeç</button>
+        </div>
       ) : null}
 
       <AddMenu
@@ -3312,6 +3375,7 @@ export const LibraryGrid = () => {
       {selectedNoteBook && selectedNoteBookStats ? (
         <BookNoteDialog
           key={selectedNoteBook.id}
+          recoveryActions={recoveryActions}
           book={selectedNoteBook}
           stats={selectedNoteBookStats}
           onArchive={archiveBook}
@@ -3322,6 +3386,7 @@ export const LibraryGrid = () => {
 
       {isShelfManagerOpen ? (
         <ShelfManagerDialog
+          recoveryActions={recoveryActions}
           activeShelfId={activeShelf.id}
           archivedBooks={libraryState.archivedBooks ?? []}
           shelves={libraryState.shelves}
@@ -3334,6 +3399,7 @@ export const LibraryGrid = () => {
 
       {isTaskOpen ? (
         <TaskModal
+          recoveryActions={recoveryActions}
           tasks={libraryState.tasks}
           onAddTask={addTask}
           onClose={() => setIsTaskOpen(false)}

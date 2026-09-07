@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Archive, BookOpen, Clock, Save, Timer, X } from "lucide-react";
 import { LibraryDialog } from "@/components/LibraryDialog";
 import {
@@ -24,6 +24,7 @@ export type EditableBook = {
 type BookNoteDialogProps = {
   book: EditableBook;
   stats: BookStudyStats;
+  recoveryActions?: ReactNode;
   onClose: () => void;
   onArchive: (bookId: string, data: { title: string; note: string }) => Promise<boolean>;
   onSave: (bookId: string, data: { title: string; note: string }) => Promise<boolean>;
@@ -32,38 +33,54 @@ type BookNoteDialogProps = {
 export const BookNoteDialog = ({
   book,
   stats,
+  recoveryActions,
   onClose,
   onArchive,
   onSave,
 }: BookNoteDialogProps) => {
   const titleInputId = useId();
   const noteInputId = useId();
+  const [openedFields] = useState({ title: book.title, note: book.note ?? "" });
   const [draftTitle, setDraftTitle] = useState(book.title);
   const [draftNote, setDraftNote] = useState(book.note ?? "");
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [pendingAction, setPendingAction] = useState<"save" | "archive" | null>(null);
   const [saveError, setSaveError] = useState("");
   const cancelDiscardRef = useRef<HTMLButtonElement>(null);
-  const isDirty = draftTitle !== book.title || draftNote !== (book.note ?? "");
+  const discardTriggerRef = useRef<HTMLElement | null>(null);
+  const saveErrorRef = useRef<HTMLParagraphElement>(null);
+  const actionInFlightRef = useRef(false);
+  const isDirty = draftTitle !== openedFields.title || draftNote !== openedFields.note;
   const bookXp = getXpIntoLevel(book.xp);
 
   const requestClose = () => {
-    if (pendingAction) return;
+    if (actionInFlightRef.current) return;
     if (isDirty) {
+      if (!confirmDiscard) {
+        discardTriggerRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      }
       setConfirmDiscard(true);
     } else {
       onClose();
     }
   };
 
+  const cancelDiscard = () => {
+    setConfirmDiscard(false);
+    discardTriggerRef.current?.focus();
+  };
+
   const saveDraft = async (action: "save" | "archive") => {
-    if (pendingAction) return;
+    if (actionInFlightRef.current) return;
+    actionInFlightRef.current = true;
     setPendingAction(action);
     setSaveError("");
     try {
       const saved = await (action === "archive" ? onArchive : onSave)(book.id, {
         title: draftTitle.trim() || "İsimsiz kitap",
-        note: draftNote.trim(),
+        note: draftNote,
       });
       if (!saved) {
         setSaveError("Kaydedilemedi. Notların burada korunuyor; yeniden deneyebilirsin.");
@@ -71,6 +88,7 @@ export const BookNoteDialog = ({
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Not kaydedilemedi. Yeniden deneyebilirsin.");
     } finally {
+      actionInFlightRef.current = false;
       setPendingAction(null);
     }
   };
@@ -88,6 +106,10 @@ export const BookNoteDialog = ({
     if (confirmDiscard) cancelDiscardRef.current?.focus();
   }, [confirmDiscard]);
 
+  useEffect(() => {
+    if (saveError) saveErrorRef.current?.focus();
+  }, [saveError]);
+
   const noteUpdatedText = book.noteUpdatedAt
     ? formatRelativeStudyDate(book.noteUpdatedAt)
     : "Not henüz kaydedilmedi";
@@ -96,7 +118,7 @@ export const BookNoteDialog = ({
     <LibraryDialog
       aria-label={`${book.title} çalışma defteri`}
       className="fixed inset-0 z-[80] overflow-y-auto bg-[#140f0b]/88 px-3 py-3 backdrop-blur-md sm:px-5 sm:py-5"
-      onClose={confirmDiscard ? () => setConfirmDiscard(false) : requestClose}
+      onClose={confirmDiscard ? cancelDiscard : requestClose}
     >
       <form
         className={`mx-auto grid min-h-[calc(100dvh-1.5rem)] w-full max-w-6xl grid-rows-[auto_1fr_auto] rounded-md border shadow-2xl shadow-black/45 sm:min-h-[calc(100dvh-2.5rem)] ${libraryTheme.current.panel}`}
@@ -148,8 +170,8 @@ export const BookNoteDialog = ({
           </button>
         </header>
 
-        <main className="grid gap-5 px-4 py-5 lg:grid-cols-[280px_1fr] lg:px-6">
-          <aside className="grid content-start gap-3">
+        <main className="grid min-w-0 gap-5 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-6">
+          <aside className="grid min-w-0 content-start gap-3">
             <div className="rounded-md border border-[#bba88c] bg-[#efe3d0] p-4">
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="text-[#6e5c47]">Seviye</span>
@@ -168,7 +190,7 @@ export const BookNoteDialog = ({
               <div className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2">
                   <Timer aria-hidden className="h-4 w-4 text-[#8a6040]" />
-                  Seans
+                  Tamamlanan seans
                 </span>
                 <strong>{stats.totalSessions}</strong>
               </div>
@@ -195,11 +217,11 @@ export const BookNoteDialog = ({
             </div>
           </aside>
 
-          <label className="grid min-h-[46dvh] gap-2 lg:min-h-0" htmlFor={noteInputId}>
+          <label className="grid min-h-[46dvh] min-w-0 gap-2 lg:min-h-0" htmlFor={noteInputId}>
             <span className="text-sm font-semibold text-[#6e5c47]">Ana not</span>
             <textarea
               id={noteInputId}
-              className="min-h-[52dvh] resize-none rounded-md border border-[#bba88c] bg-[#fffaf1] px-4 py-4 text-base leading-8 text-[#2f251b] outline-none transition placeholder:text-[#9c8975] focus:border-[#8a6040] lg:min-h-full"
+              className="min-h-[52dvh] w-full min-w-0 resize-none rounded-md border border-[#bba88c] bg-[#fffaf1] px-4 py-4 text-base leading-8 text-[#2f251b] outline-none transition placeholder:text-[#9c8975] focus:border-[#8a6040] lg:min-h-full"
               disabled={pendingAction !== null}
               placeholder="Bu kitap veya proje için çalışma notlarını yaz..."
               value={draftNote}
@@ -209,8 +231,9 @@ export const BookNoteDialog = ({
         </main>
 
         <footer className="border-t border-[#bba88c] px-4 py-4 sm:px-6">
+          {recoveryActions}
           {saveError ? (
-            <p role="alert" className="mb-3 rounded-md border border-[#d69b87] bg-[#f9e1d8] p-3 text-sm text-[#6a3727]">{saveError}</p>
+            <p ref={saveErrorRef} role="alert" tabIndex={-1} className="mb-3 break-words rounded-md border border-[#d69b87] bg-[#f9e1d8] p-3 text-sm text-[#6a3727]">{saveError}</p>
           ) : null}
           {confirmDiscard ? (
             <div role="alert" className="mb-3 rounded-md border border-[#d69b87] bg-[#f9e1d8] p-3 text-sm text-[#6a3727]">
@@ -221,7 +244,7 @@ export const BookNoteDialog = ({
                   className={`min-h-10 rounded-[4px] px-3 font-semibold ${libraryTheme.current.secondaryButton} ${libraryTheme.current.focusRing}`}
                   disabled={pendingAction !== null}
                   type="button"
-                  onClick={() => setConfirmDiscard(false)}
+                  onClick={cancelDiscard}
                 >
                   Düzenlemeye devam et
                 </button>

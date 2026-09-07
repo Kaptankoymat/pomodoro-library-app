@@ -39,6 +39,20 @@ export const getTodayKey = (date = new Date()): string => {
   return `${year}-${month}-${day}`;
 };
 
+export const getDailyFocusXp = (state: LibraryState, date = new Date()): number => {
+  const dateKey = getTodayKey(date);
+  const recordedXp = (state.focusSessions ?? []).reduce(
+    (total, session) =>
+      getTodayKey(new Date(session.completedAt)) === dateKey
+        ? total + session.awardedXp
+        : total,
+    0,
+  );
+
+  // Keep legacy XP absent from history, and recover previous days after a clock change.
+  return Math.max(state.dailyFocus.dateKey === dateKey ? state.dailyFocus.xp : 0, recordedXp);
+};
+
 export const getLevelFromXp = (xp: number): number =>
   Math.max(1, Math.floor(xp / XP_PER_LEVEL) + 1);
 
@@ -140,13 +154,7 @@ export const completeFocusSession = (
   summary: FocusRewardSummary;
 } => {
   const todayKey = getTodayKey(date);
-  const dailyFocus =
-    state.dailyFocus.dateKey === todayKey
-      ? state.dailyFocus
-      : {
-          dateKey: todayKey,
-          xp: 0,
-        };
+  const dailyFocus = { dateKey: todayKey, xp: getDailyFocusXp(state, date) };
   const awardedXp = Math.max(0, Math.min(SESSION_XP, DAILY_XP_LIMIT - dailyFocus.xp));
   const wardrobe = normalizeWardrobeState(state.wardrobe);
   const selectedItem = state.items.find(

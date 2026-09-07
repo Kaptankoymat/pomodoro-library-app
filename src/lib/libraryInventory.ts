@@ -135,9 +135,11 @@ export const createShelfWithTimer = (params: {
 export const ensureShelfTimers = (
   shelves: LibraryShelf[],
   items: LibraryItem[],
+  reservedItemIds: Iterable<string> = [],
 ): LibraryItem[] => {
   let nextItems = [...items];
   let changed = false;
+  const usedIds = new Set([...items.map((item) => item.id), ...reservedItemIds]);
 
   for (const shelf of shelves) {
     const shelfTimers = nextItems.filter(
@@ -148,12 +150,12 @@ export const ensureShelfTimers = (
       const keeper = [...shelfTimers].sort(
         (left, right) =>
           Number(Boolean(right.costumeId)) - Number(Boolean(left.costumeId)) ||
-          right.xp - left.xp,
+          (right.xp ?? 0) - (left.xp ?? 0),
       )[0];
       const mergedKeeper: TimerItem = {
         ...keeper,
-        xp: Math.max(...shelfTimers.map((timer) => timer.xp)),
-        level: Math.max(...shelfTimers.map((timer) => timer.level)),
+        xp: Math.max(...shelfTimers.map((timer) => timer.xp ?? 0)),
+        level: Math.max(1, ...shelfTimers.map((timer) => timer.level ?? 1)),
         costumeId:
           keeper.costumeId ?? shelfTimers.find((timer) => timer.costumeId)?.costumeId,
       };
@@ -174,9 +176,14 @@ export const ensureShelfTimers = (
       row: 1,
       col: 4,
     };
+    const baseId = `timer-${shelf.id}`;
+    let timerId = baseId;
+    let suffix = 2;
+    while (usedIds.has(timerId)) timerId = `${baseId}-${suffix++}`;
+    usedIds.add(timerId);
     nextItems.push(
       createTimerItem({
-        id: `timer-${shelf.id}`,
+        id: timerId,
         shelfId: shelf.id,
         position,
       }),

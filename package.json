@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "check": "npm run test && npm run lint && tsc --noEmit --incremental false && npm run build"
+    "check": "npm run test && npm run lint && tsc --noEmit --incremental false && npm run build",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "framer-motion": "^12.0.0",
@@ -18,6 +19,7 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
@@ -27,5 +29,8 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
     "vitest": "^5.0.0"
+  },
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0 || >=26.0.0"
   }
 }

@@ -45,7 +45,10 @@ export const createItemWithCostume = (
 ): LibraryItem => {
   const defaultCostumeId =
     wardrobe.defaultCostumeByKind[item.kind] ?? getDefaultCostumeId(item.kind);
-  const size = getCostumeGridSize(item.kind, costume);
+  // Shelf notes grow with their tasks, independently of the costume artwork.
+  const size = item.kind === "sticky" && item.placement === "shelf"
+    ? { widthUnits: item.widthUnits, heightUnits: item.heightUnits }
+    : getCostumeGridSize(item.kind, costume);
 
   return {
     ...item,

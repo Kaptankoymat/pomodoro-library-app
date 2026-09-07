@@ -257,13 +257,13 @@ export const DEFAULT_COSTUME_BY_KIND = Object.fromEntries(
 
 export const INITIAL_UNLOCKED_COSTUME_IDS = Object.values(DEFAULT_COSTUME_BY_KIND);
 
-const legacyBookSkinCostumeMap: Record<BookSkin, CostumeId> = {
-  botanical: "book:arcane",
-  classic: "book:classic",
-  gilded: "book:arcane",
-  moonlit: "book:secret",
-  obsidian: "book:secret",
-};
+const legacyBookSkinCostumeMap = new Map<BookSkin, CostumeId>([
+  ["botanical", "book:arcane"],
+  ["classic", "book:classic"],
+  ["gilded", "book:arcane"],
+  ["moonlit", "book:secret"],
+  ["obsidian", "book:secret"],
+]);
 
 export const getCostumeDefinition = (
   costumeId: CostumeId | undefined,
@@ -386,7 +386,7 @@ export const normalizeItemsForCostumes = (
     const legacyUnlockedSkins = item.kind === "book" ? item.unlockedSkins : undefined;
     const legacyCostumeId =
       legacySkin && legacySkin !== "classic"
-        ? legacyBookSkinCostumeMap[legacySkin]
+        ? legacyBookSkinCostumeMap.get(legacySkin)
         : undefined;
     const defaultCostumeId =
       wardrobe.defaultCostumeByKind[item.kind] ?? getDefaultCostumeId(item.kind);
@@ -406,11 +406,11 @@ export const normalizeItemsForCostumes = (
 
     if (Array.isArray(legacyUnlockedSkins)) {
       for (const skin of legacyUnlockedSkins) {
-        const costumeId = legacyBookSkinCostumeMap[skin];
+        const costumeId = legacyBookSkinCostumeMap.get(skin);
 
         if (costumeId) unlockedCostumeIds.add(costumeId);
 
-        if (getCostumeDefinition(costumeId)?.visibility === "secret") {
+        if (costumeId && getCostumeDefinition(costumeId)?.visibility === "secret") {
           revealedSecretCostumeIds.add(costumeId);
         }
       }
