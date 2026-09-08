@@ -85,7 +85,6 @@ import {
 } from "react";
 
 import { AddMenu } from "@/components/library/AddMenu";
-import { FocusDock } from "@/components/library/FocusDock";
 import {
   LibraryAtmosphere,
   LibraryVine,
@@ -1429,6 +1428,18 @@ export const LibraryGrid = () => {
             <span className="library-title-star" aria-hidden="true">
               ✦
             </span>
+            <span
+              className="library-plaque-flourish library-plaque-flourish--left"
+              aria-hidden
+            >
+              ❧
+            </span>
+            <span
+              className="library-plaque-flourish library-plaque-flourish--right"
+              aria-hidden
+            >
+              ❧
+            </span>
             <h1>
               POMODORO<span>LIBRARY</span>
             </h1>
@@ -1449,23 +1460,6 @@ export const LibraryGrid = () => {
             </span>
           </div>
         </header>
-        <FocusDock
-          timerText={timerText}
-          isRunning={timer.isRunning}
-          targetTitle={selectedFocusBook?.title ?? null}
-          completedSessions={
-            (libraryState.focusSessions ?? []).filter(
-              (session) => session.completion !== "ended-early",
-            ).length
-          }
-          dailyXp={currentDailyXp}
-          onOpen={() => {
-            setRewardSummary(null);
-            setIsFocusTargetSelectionMode(false);
-            setIsTimerOpen(true);
-          }}
-          onToggle={timer.isRunning ? pauseFocusTimer : startFocusTimer}
-        />
         <div className="library-scene-heading">
           <span className="library-eyebrow">
             RAF {String(activeShelfIndex + 1).padStart(2, "0")}{" "}
@@ -1473,38 +1467,48 @@ export const LibraryGrid = () => {
           </span>
           <span>
             {activeShelfItems.filter(isBookItem).length} kitap{" "}
-            <span aria-hidden="true">·</span> Her odak, yeni bir hikâye.
+            <span aria-hidden="true">·</span> {currentDailyXp} XP bugün
           </span>
         </div>
-        <Scene
-          shelf={activeShelf}
-          items={activeShelfItems}
-          tasks={libraryState.tasks}
-          timerText={timerText}
-          isTimerRunning={timer.isRunning}
-          selectedFocusBookTitle={selectedFocusBook?.title ?? null}
-          wardrobe={wardrobe}
-          isWardrobeMode={isWardrobeMode}
-          isFocusTargetSelectionMode={isFocusTargetSelectionMode}
-          selectedFocusBookId={libraryState.selectedFocusItemId}
-          selectedWardrobeItemId={selectedWardrobeItemId}
-          wardrobePreview={wardrobePreview}
-          onMoveItem={moveItem}
-          onMoveSideItem={moveSideItem}
-          onSelectFocusBook={selectFocusBook}
-          onSelectWardrobeItem={selectWardrobeItem}
-          onOpenBook={(bookId) => {
-            const book = books.find((candidate) => candidate.id === bookId);
-            setSelectedNoteBaseline(book ?? null);
-            setSelectedNoteBookId(bookId);
-          }}
-          onOpenTasks={() => setIsTaskOpen(true)}
-          onOpenTimer={() => {
-            setRewardSummary(null);
-            setIsFocusTargetSelectionMode(false);
-            setIsTimerOpen(true);
-          }}
-        />
+        <div className="library-shelf-environment">
+          <Scene
+            shelf={activeShelf}
+            items={activeShelfItems}
+            tasks={libraryState.tasks}
+            timerText={timerText}
+            isTimerRunning={timer.isRunning}
+            onToggleTimer={timer.isRunning ? pauseFocusTimer : startFocusTimer}
+            selectedFocusBookTitle={selectedFocusBook?.title ?? null}
+            wardrobe={wardrobe}
+            isWardrobeMode={isWardrobeMode}
+            isFocusTargetSelectionMode={isFocusTargetSelectionMode}
+            selectedFocusBookId={libraryState.selectedFocusItemId}
+            selectedWardrobeItemId={selectedWardrobeItemId}
+            wardrobePreview={wardrobePreview}
+            onMoveItem={moveItem}
+            onMoveSideItem={moveSideItem}
+            onSelectFocusBook={selectFocusBook}
+            onSelectWardrobeItem={selectWardrobeItem}
+            onOpenBook={(bookId) => {
+              const book = books.find((candidate) => candidate.id === bookId);
+              setSelectedNoteBaseline(book ?? null);
+              setSelectedNoteBookId(bookId);
+            }}
+            onOpenTasks={() => setIsTaskOpen(true)}
+            onOpenTimer={() => {
+              setRewardSummary(null);
+              setIsFocusTargetSelectionMode(false);
+              setIsTimerOpen(true);
+            }}
+          />
+          <div className="library-frame-foliage" aria-hidden>
+            <LibraryVine className="library-frame-vine library-frame-vine--left" />
+            <LibraryVine
+              className="library-frame-vine library-frame-vine--right"
+              flipped
+            />
+          </div>
+        </div>
         <div className="library-controls">
           <LibraryNavigation
             shelf={activeShelf}

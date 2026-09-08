@@ -4,6 +4,7 @@ import { useId, useState, type CSSProperties } from "react";
 import { ArrowRightLeft, Check, Move, X } from "lucide-react";
 import { LibraryDialog } from "@/components/LibraryDialog";
 import { LibraryItemVisual } from "@/components/library/LibraryItemVisual";
+import { ShelfTimer } from "@/components/library/ShelfTimer";
 import { getResolvedCostume } from "@/lib/libraryCostumeDefinitions";
 import { resolveLibraryShelfDrop } from "@/lib/libraryDrop";
 import {
@@ -41,6 +42,7 @@ export type MobileLibrarySceneProps = {
   selectedWardrobeItemId: string | null;
   onOpenBook: (bookId: string) => void;
   onOpenTimer: () => void;
+  onToggleTimer: () => Promise<boolean>;
   onOpenTasks: () => void;
   onSelectFocusBook: (bookId: string) => void;
   onSelectWardrobeItem: (itemId: string) => void;
@@ -254,6 +256,7 @@ export const MobileLibraryScene = (props: MobileLibrarySceneProps) => {
     selectedWardrobeItemId,
     onOpenBook,
     onOpenTimer,
+    onToggleTimer,
     onOpenTasks,
     onSelectFocusBook,
     onSelectWardrobeItem,
@@ -276,6 +279,53 @@ export const MobileLibraryScene = (props: MobileLibrarySceneProps) => {
     const isSelected = isWardrobeMode
       ? item.id === selectedWardrobeItemId
       : item.kind === "book" && item.id === selectedFocusBookId;
+    const itemAttributes = {
+      "data-selected": isSelected,
+      "data-item-id": item.id,
+      "data-item-kind": item.kind,
+      "data-grid-row": isShelfPlacedItem(item) ? item.row : undefined,
+      "data-grid-col": isShelfPlacedItem(item) ? item.col : undefined,
+      "data-side-placement": isSideColumnPlacedItem(item)
+        ? item.placement
+        : undefined,
+      "data-side-slot": isSideColumnPlacedItem(item)
+        ? item.sideSlot
+        : undefined,
+    };
+    const timerVisual =
+      item.kind === "timer" ? (
+        <ShelfTimer
+          item={item}
+          costume={costume}
+          timerText={timerText}
+          isRunning={isTimerRunning}
+          targetTitle={selectedFocusBookTitle}
+          onOpen={onOpenTimer}
+          onToggle={onToggleTimer}
+          isEditing={isWardrobeMode || isArranging}
+        />
+      ) : null;
+    if (item.kind === "timer" && !isWardrobeMode && !isArranging) {
+      return (
+        <li
+          key={item.id}
+          className="mobile-library-entry mobile-library-entry--timer"
+        >
+          <div
+            className="mobile-library-timer"
+            {...itemAttributes}
+            onClick={(event) => {
+              event.currentTarget
+                .querySelector<HTMLButtonElement>('[data-focus-key$="-open"]')
+                ?.focus();
+              onOpenTimer();
+            }}
+          >
+            {timerVisual}
+          </div>
+        </li>
+      );
+    }
     const actionLabel = isWardrobeMode
       ? "Kostüm seç"
       : isFocusTargetSelectionMode && item.kind === "book"
@@ -309,17 +359,7 @@ export const MobileLibraryScene = (props: MobileLibrarySceneProps) => {
               ? isSelected
               : undefined
           }
-          data-selected={isSelected}
-          data-item-id={item.id}
-          data-item-kind={item.kind}
-          data-grid-row={isShelfPlacedItem(item) ? item.row : undefined}
-          data-grid-col={isShelfPlacedItem(item) ? item.col : undefined}
-          data-side-placement={
-            isSideColumnPlacedItem(item) ? item.placement : undefined
-          }
-          data-side-slot={
-            isSideColumnPlacedItem(item) ? item.sideSlot : undefined
-          }
+          {...itemAttributes}
           onClick={() => {
             if (isWardrobeMode) onSelectWardrobeItem(item.id);
             else if (isFocusTargetSelectionMode && item.kind === "book")
@@ -342,14 +382,16 @@ export const MobileLibraryScene = (props: MobileLibrarySceneProps) => {
                   : undefined
               }
             >
-              <LibraryItemVisual
-                costume={costume}
-                item={item}
-                tasks={tasks}
-                timerText={timerText}
-                isTimerRunning={isTimerRunning}
-                selectedFocusBookTitle={selectedFocusBookTitle}
-              />
+              {timerVisual ?? (
+                <LibraryItemVisual
+                  costume={costume}
+                  item={item}
+                  tasks={tasks}
+                  timerText={timerText}
+                  isTimerRunning={isTimerRunning}
+                  selectedFocusBookTitle={selectedFocusBookTitle}
+                />
+              )}
             </span>
             {isSelected ? (
               <span className="mobile-library-selection">
@@ -400,6 +442,7 @@ export const MobileLibraryScene = (props: MobileLibrarySceneProps) => {
             className="mobile-library-row"
             key={row}
             aria-label={`${row + 1}. raf katı`}
+            data-has-timer={rowItems.some((item) => item.kind === "timer")}
           >
             <span className="mobile-library-row-label">
               {String(row + 1).padStart(2, "0")}

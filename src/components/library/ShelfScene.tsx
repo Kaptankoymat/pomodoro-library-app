@@ -3,18 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MotionConfig, motion, type Transition } from "framer-motion";
 import { useGridMetrics } from "@/hooks/useGridMetrics";
-import {
-  getResolvedItemPosition,
-  gridToPixel,
-  pixelToGridTarget,
-  resolveResizeLayout,
-} from "@/lib/gridLogic";
-import type {
-  GridMetrics,
-  GridPosition,
-  GridSize,
-  PixelPoint,
-} from "@/lib/gridLogic";
+import { getResolvedItemPosition, resolveResizeLayout } from "@/lib/gridLogic";
+import type { GridPosition, GridSize, PixelPoint } from "@/lib/gridLogic";
 import { resolveLibraryShelfDrop } from "@/lib/libraryDrop";
 import { getResolvedCostume } from "@/lib/libraryCostumeDefinitions";
 import {
@@ -37,6 +27,15 @@ import type {
   LibraryWardrobeState,
   SideColumnPlacement,
 } from "@/types/library";
+import { ShelfTimer } from "@/components/library/ShelfTimer";
+import {
+  createShelfPresentation,
+  getShelfDropPosition,
+  getShelfItemRect,
+  getShelfPreviewRect,
+  visualRectsOverlap,
+  type ShelfPresentation,
+} from "@/lib/shelfPresentation";
 import { LibraryItemVisual } from "@/components/library/LibraryItemVisual";
 import {
   BookStack,
@@ -48,15 +47,14 @@ import {
   Hourglass,
   CrystalCluster,
   MagicLamp,
+  BotanicalCloche,
+  AntiqueLantern,
 } from "@/components/library/LibraryAtmosphere";
 
 const DRAG_CLICK_SUPPRESSION_THRESHOLD = 6;
 const GRID_MEASUREMENT_EPSILON = 2.5;
-const SHELF_BOARD_OFFSET = 16;
 const SHELF_BACK_BOARD_HEIGHT = 26;
 const SHELF_FRONT_LIP_HEIGHT = 22;
-const SHELF_VISUAL_CLEARANCE = 14;
-const SHELF_VISUAL_ROW_GAP = 18;
 
 const springTransition: Transition = {
   type: "spring",
@@ -76,93 +74,26 @@ const getShelfMetrics = () => ({
   rowCount: getEffectiveShelfRowCount(),
 });
 
-const getShelfBoardTop = (row: number, metrics: GridMetrics): number =>
-  row * (metrics.cellHeight + metrics.gap) +
-  metrics.cellHeight -
-  SHELF_BOARD_OFFSET +
-  SHELF_VISUAL_CLEARANCE +
-  row * SHELF_VISUAL_ROW_GAP;
-
-const getShelfVisualRowOffset = (row: number): number =>
-  row * SHELF_VISUAL_ROW_GAP;
-
-const getShelfVisualHeight = (metrics: GridMetrics): number =>
-  metrics.height +
-  SHELF_VISUAL_CLEARANCE +
-  Math.max(0, metrics.rowCount - 1) * SHELF_VISUAL_ROW_GAP;
-
-const getGridYFromShelfVisualY = (
-  visualY: number,
-  metrics: GridMetrics,
-): number => {
-  const visualRowStep = metrics.cellHeight + metrics.gap + SHELF_VISUAL_ROW_GAP;
-  const estimatedRow = Math.min(
-    metrics.rowCount - 1,
-    Math.max(0, Math.round(visualY / visualRowStep)),
-  );
-
-  return (
-    visualY - SHELF_VISUAL_CLEARANCE - getShelfVisualRowOffset(estimatedRow)
-  );
-};
-
-const toItemStyle = (
-  item: LibraryItem,
-  metrics: GridMetrics,
-  options: { includeAlignmentOffset?: boolean } = {},
-) => {
-  const { includeAlignmentOffset = true } = options;
-  const heightReduction = 0;
-  const rawWidth =
-    item.widthUnits * metrics.cellWidth + (item.widthUnits - 1) * metrics.gap;
-  const rawHeight =
-    item.heightUnits * metrics.cellHeight +
-    (item.heightUnits - 1) * metrics.gap;
-  const occupiedRows = Math.ceil(item.heightUnits);
-  const fullCellHeight =
-    occupiedRows * metrics.cellHeight + (occupiedRows - 1) * metrics.gap;
-  const bottomAlignOffset = fullCellHeight - rawHeight;
-  const baseHeight = rawHeight - heightReduction;
-  const minTimerWidth = item.kind === "timer" ? 138 : 0;
-  const minTimerHeight = item.kind === "timer" ? 44 : 0;
-  const visualWidth = Math.max(rawWidth, minTimerWidth);
-  const visualHeight = Math.max(baseHeight, minTimerHeight);
-  const extraVisualHeight = Math.max(0, visualHeight - baseHeight);
-  const extraVisualWidth = Math.max(0, visualWidth - rawWidth);
-  const visualStyle = {
-    width: visualWidth,
-    height: visualHeight,
-  };
-
-  return includeAlignmentOffset
-    ? {
-        ...visualStyle,
-        marginLeft: extraVisualWidth ? -extraVisualWidth / 2 : undefined,
-        marginTop: heightReduction + bottomAlignOffset - extraVisualHeight,
-      }
-    : visualStyle;
-};
-
 const getDraggedGridPosition = (params: {
-  currentPosition: GridPosition;
+  item: LibraryItem;
   grabOffset: PixelPoint;
+  logicalOffsetX: number;
   gridElement: HTMLElement | null;
   pointer: PixelPoint;
   size: GridSize;
-  metrics: GridMetrics;
+  presentation: ShelfPresentation;
 }): GridPosition => {
-  if (!params.gridElement) {
-    return params.currentPosition;
-  }
-
+  if (!params.gridElement) return params.item;
   const gridRect = params.gridElement.getBoundingClientRect();
-  const visualY = params.pointer.y - gridRect.top - params.grabOffset.y;
-  const point = {
-    x: params.pointer.x - gridRect.left - params.grabOffset.x,
-    y: getGridYFromShelfVisualY(visualY, params.metrics),
-  };
-
-  return pixelToGridTarget(point, params.size, params.metrics).position;
+  return getShelfDropPosition(
+    {
+      x: params.pointer.x - gridRect.left - params.grabOffset.x,
+      y: params.pointer.y - gridRect.top - params.grabOffset.y,
+    },
+    { ...params.item, ...params.size },
+    params.presentation,
+    params.logicalOffsetX,
+  );
 };
 
 const hasPointerMovedEnoughToDrag = (
@@ -302,6 +233,7 @@ export type ShelfSceneProps = {
   ) => void;
   onOpenBook: (bookId: string) => void;
   onOpenTimer: () => void;
+  onToggleTimer: () => Promise<boolean>;
   onOpenTasks: () => void;
   onSelectFocusBook: (bookId: string) => void;
   onSelectWardrobeItem: (itemId: string) => void;
@@ -322,6 +254,7 @@ type SidePlacementPreview = SideColumnTarget & {
 type DragSession = {
   itemId: string;
   grabOffset: PixelPoint;
+  logicalOffsetX: number;
 };
 
 type ActiveDrag = DragSession & {
@@ -347,6 +280,7 @@ export const ShelfScene = ({
   onMoveSideItem,
   onOpenBook,
   onOpenTimer,
+  onToggleTimer,
   onOpenTasks,
   onSelectFocusBook,
   onSelectWardrobeItem,
@@ -389,8 +323,32 @@ export const ShelfScene = ({
     () => resolveResizeLayout(shelfItems, metrics),
     [shelfItems, metrics],
   );
-  const previewPoint = placementPreview
-    ? gridToPixel(placementPreview, metrics)
+  const presentation = useMemo(
+    () => createShelfPresentation(renderedItems, metrics),
+    [renderedItems, metrics],
+  );
+  const previewItem = placementPreview
+    ? items.find((item) => item.id === placementPreview.itemId)
+    : null;
+  const previewRect =
+    placementPreview && previewItem
+      ? getShelfPreviewRect(
+          { ...previewItem, ...placementPreview },
+          presentation,
+        )
+      : null;
+  const wardrobePreviewItem = wardrobePreview
+    ? items.find((item) => item.id === wardrobePreview.itemId)
+    : null;
+  const wardrobePreviewRect =
+    wardrobePreview && wardrobePreviewItem
+      ? getShelfPreviewRect(
+          { ...wardrobePreviewItem, ...wardrobePreview },
+          presentation,
+        )
+      : null;
+  const ghostRect = activeDrag
+    ? getShelfItemRect(activeDrag.item, presentation)
     : null;
   const ghostPoint = activeDrag
     ? {
@@ -434,7 +392,7 @@ export const ShelfScene = ({
     observer.observe(sideColumnElement);
 
     return () => observer.disconnect();
-  }, [metrics.height]);
+  }, [presentation.height]);
 
   const releaseObjectOpenSuppression = useCallback(() => {
     window.setTimeout(() => {
@@ -458,16 +416,22 @@ export const ShelfScene = ({
   }, []);
 
   const resolveDragPreview = useCallback(
-    (item: LibraryItem, pointer: PixelPoint, grabOffset: PixelPoint) => {
+    (
+      item: LibraryItem,
+      pointer: PixelPoint,
+      grabOffset: PixelPoint,
+      logicalOffsetX: number,
+    ) => {
       const shelfSize =
         item.kind === "sticky" ? getStickyTaskGridSize(tasks) : item;
       const target = getDraggedGridPosition({
-        currentPosition: item,
+        item,
         grabOffset,
+        logicalOffsetX,
         gridElement: gridRef.current,
         pointer,
         size: shelfSize,
-        metrics,
+        presentation,
       });
       const resolution = resolveLibraryShelfDrop({
         itemId: item.id,
@@ -500,7 +464,7 @@ export const ShelfScene = ({
 
       return target;
     },
-    [metrics, renderedItems, shelf, sideColumnItems, tasks],
+    [presentation, renderedItems, shelf, sideColumnItems, tasks],
   );
 
   const getSideColumnTarget = useCallback(
@@ -573,7 +537,12 @@ export const ShelfScene = ({
         return;
       }
 
-      resolveDragPreview(pendingDrag.item, pointer, pendingDrag.grabOffset);
+      resolveDragPreview(
+        pendingDrag.item,
+        pointer,
+        pendingDrag.grabOffset,
+        pendingDrag.logicalOffsetX,
+      );
     },
     [
       getSideColumnTarget,
@@ -633,6 +602,7 @@ export const ShelfScene = ({
         pendingDrag.item,
         pointer,
         pendingDrag.grabOffset,
+        pendingDrag.logicalOffsetX,
       );
 
       onMoveItem(shelf, pendingDrag.itemId, target);
@@ -884,6 +854,7 @@ export const ShelfScene = ({
                             x: pointer.x - itemRect.left,
                             y: pointer.y - itemRect.top,
                           },
+                          logicalOffsetX: 0,
                           pointer,
                           pointerId: event.pointerId,
                         };
@@ -974,18 +945,18 @@ export const ShelfScene = ({
             <div
               ref={containerRef}
               className="library-grid-container"
-              style={{ minHeight: getShelfVisualHeight(metrics) + 66 }}
+              style={{ minHeight: presentation.height + 66 }}
             >
               <div
                 ref={gridRef}
                 className="library-grid"
                 style={{
                   width: metrics.width,
-                  height: getShelfVisualHeight(metrics),
+                  height: presentation.height,
                 }}
               >
                 {Array.from({ length: metrics.rowCount }).map((_, row) => {
-                  const shelfTop = getShelfBoardTop(row, metrics);
+                  const shelfTop = presentation.boardTops[row];
 
                   return (
                     <div
@@ -1007,7 +978,7 @@ export const ShelfScene = ({
                       UprightBooks,
                       MagicLamp,
                       BookStack,
-                      GlassJar,
+                      BotanicalCloche,
                       ConstellationGlobe,
                     ],
                     [GlassJar, UprightBooks, Hourglass, BookStack, SleepingCat],
@@ -1018,7 +989,13 @@ export const ShelfScene = ({
                       CrystalCluster,
                       GlassJar,
                     ],
-                    [MagicLamp, BookStack, GlassJar, UprightBooks, Hourglass],
+                    [
+                      AntiqueLantern,
+                      BookStack,
+                      GlassJar,
+                      UprightBooks,
+                      Hourglass,
+                    ],
                   ];
                   return [3, 8, 13, 18, 23].map((col, index) => {
                     const widthUnits = 4;
@@ -1029,7 +1006,19 @@ export const ShelfScene = ({
                         item.col < col + widthUnits &&
                         item.col + item.widthUnits > col,
                     );
-                    if (isOccupied) return null;
+                    const accentRect = {
+                      x: col * (metrics.cellWidth + metrics.gap),
+                      y:
+                        presentation.boardTops[row] - metrics.cellHeight * 0.84,
+                      width: 4 * metrics.cellWidth + 3 * metrics.gap,
+                      height: metrics.cellHeight * 0.84,
+                    };
+                    if (
+                      isOccupied ||
+                      (presentation.timer &&
+                        visualRectsOverlap(accentRect, presentation.timer.rect))
+                    )
+                      return null;
                     const Ornament = ornaments[row % ornaments.length][index];
                     return (
                       <span
@@ -1039,7 +1028,7 @@ export const ShelfScene = ({
                         style={{
                           left: col * (metrics.cellWidth + metrics.gap),
                           top:
-                            getShelfBoardTop(row, metrics) -
+                            presentation.boardTops[row] -
                             metrics.cellHeight * 0.84,
                           width: 4 * metrics.cellWidth + 3 * metrics.gap,
                           height: metrics.cellHeight * 0.84,
@@ -1051,115 +1040,52 @@ export const ShelfScene = ({
                   });
                 })}
 
-                {placementPreview ? (
+                {placementPreview && previewRect ? (
                   <motion.div
                     aria-hidden
-                    className={`pointer-events-none absolute left-0 top-0 rounded-[8px] border-2 ${
-                      placementPreview.state === "blocked"
-                        ? "border-rose-300/50 bg-rose-50/30 shadow-sm"
-                        : "border-stone-300/60 bg-stone-100/40 shadow-sm"
-                    }`}
+                    className={`pointer-events-none absolute left-0 top-0 rounded-[8px] border-2 ${placementPreview.state === "blocked" ? "border-rose-300/50 bg-rose-50/30" : "border-stone-300/60 bg-stone-100/25"}`}
                     data-placement-preview={placementPreview.state}
-                    initial={{
-                      opacity: 0,
-                      scale: 0.94,
-                      x: previewPoint?.x ?? 0,
-                      y:
-                        (previewPoint?.y ?? 0) -
-                        16 +
-                        SHELF_VISUAL_CLEARANCE +
-                        getShelfVisualRowOffset(placementPreview.row),
-                    }}
+                    initial={false}
                     animate={{
+                      x: previewRect.x,
+                      y: previewRect.y,
                       opacity:
                         placementPreview.state === "blocked" ? 0.44 : 0.78,
-                      scale: placementPreview.state === "swap" ? 1.04 : 1,
-                      x: previewPoint?.x ?? 0,
-                      y:
-                        (previewPoint?.y ?? 0) -
-                        16 +
-                        SHELF_VISUAL_CLEARANCE +
-                        getShelfVisualRowOffset(placementPreview.row),
                     }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 650,
-                      damping: 40,
-                      mass: 0.7,
-                    }}
+                    transition={immediateTransition}
                     style={{
-                      width:
-                        placementPreview.widthUnits * metrics.cellWidth +
-                        (placementPreview.widthUnits - 1) * metrics.gap,
-                      height:
-                        placementPreview.heightUnits * metrics.cellHeight +
-                        (placementPreview.heightUnits - 1) * metrics.gap,
-                      marginTop: (() => {
-                        const rawHeight =
-                          placementPreview.heightUnits * metrics.cellHeight +
-                          (placementPreview.heightUnits - 1) * metrics.gap;
-                        const occupiedRows = Math.ceil(
-                          placementPreview.heightUnits,
-                        );
-                        const fullCellHeight =
-                          occupiedRows * metrics.cellHeight +
-                          (occupiedRows - 1) * metrics.gap;
-                        return fullCellHeight - rawHeight;
-                      })(),
+                      width: previewRect.width,
+                      height: previewRect.height,
                       zIndex: 6,
                     }}
                   />
                 ) : null}
-
-                {wardrobePreview ? (
+                {wardrobePreview && wardrobePreviewRect ? (
                   <motion.div
                     aria-hidden
-                    className={`pointer-events-none absolute left-0 top-0 rounded-[8px] border-2 ${
-                      wardrobePreview.state === "blocked"
-                        ? "border-rose-300/60 bg-rose-50/35"
-                        : "border-amber-200/70 bg-amber-100/25"
-                    } shadow-[0_0_18px_rgba(251,191,36,0.18)]`}
+                    className={`pointer-events-none absolute left-0 top-0 rounded-[8px] border-2 ${wardrobePreview.state === "blocked" ? "border-rose-300/60 bg-rose-50/35" : "border-amber-200/70 bg-amber-100/25"}`}
                     data-costume-placement-preview={wardrobePreview.state}
-                    initial={{
-                      opacity: 0,
-                      scale: 0.94,
-                      x: gridToPixel(wardrobePreview, metrics).x,
-                      y:
-                        gridToPixel(wardrobePreview, metrics).y -
-                        16 +
-                        SHELF_VISUAL_CLEARANCE +
-                        getShelfVisualRowOffset(wardrobePreview.row),
-                    }}
+                    initial={false}
                     animate={{
+                      x: wardrobePreviewRect.x,
+                      y: wardrobePreviewRect.y,
                       opacity: wardrobePreview.state === "blocked" ? 0.5 : 0.82,
-                      scale: wardrobePreview.state === "blocked" ? 0.98 : 1,
-                      x: gridToPixel(wardrobePreview, metrics).x,
-                      y:
-                        gridToPixel(wardrobePreview, metrics).y -
-                        16 +
-                        SHELF_VISUAL_CLEARANCE +
-                        getShelfVisualRowOffset(wardrobePreview.row),
                     }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 650,
-                      damping: 40,
-                      mass: 0.7,
-                    }}
+                    transition={immediateTransition}
                     style={{
-                      width:
-                        wardrobePreview.widthUnits * metrics.cellWidth +
-                        (wardrobePreview.widthUnits - 1) * metrics.gap,
-                      height:
-                        wardrobePreview.heightUnits * metrics.cellHeight +
-                        (wardrobePreview.heightUnits - 1) * metrics.gap,
+                      width: wardrobePreviewRect.width,
+                      height: wardrobePreviewRect.height,
                       zIndex: 7,
                     }}
                   />
                 ) : null}
 
                 {renderedItems.map((item) => {
-                  const point = gridToPixel(item, metrics);
+                  const rect = getShelfItemRect(item, presentation);
+                  const ItemElement =
+                    item.kind === "timer" ? motion.div : motion.button;
+                  const isEditingTimer =
+                    isWardrobeMode || isFocusTargetSelectionMode;
                   const costume = getResolvedCostume(item, wardrobe);
                   const isGhosted = activeDrag?.itemId === item.id;
                   const isWardrobeSelected = selectedWardrobeItemId === item.id;
@@ -1168,9 +1094,30 @@ export const ShelfScene = ({
                     isFocusTargetSelectionMode && item.kind === "book";
 
                   return (
-                    <motion.button
+                    <ItemElement
                       key={item.id}
-                      type="button"
+                      type={item.kind === "timer" ? undefined : "button"}
+                      role={
+                        item.kind === "timer"
+                          ? isEditingTimer
+                            ? "button"
+                            : "group"
+                          : undefined
+                      }
+                      tabIndex={
+                        item.kind === "timer" && isEditingTimer ? 0 : undefined
+                      }
+                      onKeyDown={(event) => {
+                        if (
+                          item.kind === "timer" &&
+                          isEditingTimer &&
+                          (event.key === "Enter" || event.key === " ")
+                        ) {
+                          event.preventDefault();
+                          if (isWardrobeMode) onSelectWardrobeItem(item.id);
+                          else onOpenTimer();
+                        }
+                      }}
                       aria-label={item.title}
                       data-grid-col={item.col}
                       data-grid-row={item.row}
@@ -1197,13 +1144,10 @@ export const ShelfScene = ({
                           : ""
                       }`}
                       style={{
-                        ...toItemStyle(item, metrics),
-                        x: point.x,
-                        y:
-                          point.y -
-                          16 +
-                          SHELF_VISUAL_CLEARANCE +
-                          getShelfVisualRowOffset(item.row),
+                        width: rect.width,
+                        height: rect.height,
+                        x: rect.x,
+                        y: rect.y,
                         zIndex: item.kind === "timer" ? 30 : 10 + item.row,
                       }}
                       animate={{
@@ -1239,6 +1183,9 @@ export const ShelfScene = ({
                             x: pointer.x - itemRect.left,
                             y: pointer.y - itemRect.top,
                           },
+                          logicalOffsetX:
+                            item.col * (metrics.cellWidth + metrics.gap) -
+                            rect.x,
                           pointer,
                           pointerId: event.pointerId,
                         };
@@ -1314,6 +1261,11 @@ export const ShelfScene = ({
                         }
 
                         if (item.kind === "timer") {
+                          event.currentTarget
+                            .querySelector<HTMLButtonElement>(
+                              '[data-focus-key$="-open"]',
+                            )
+                            ?.focus();
                           onOpenTimer();
                         }
 
@@ -1322,20 +1274,33 @@ export const ShelfScene = ({
                         }
                       }}
                     >
-                      <LibraryItemVisual
-                        costume={costume}
-                        item={item}
-                        tasks={tasks}
-                        isTimerRunning={isTimerRunning}
-                        selectedFocusBookTitle={selectedFocusBookTitle}
-                        timerText={timerText}
-                      />
-                    </motion.button>
+                      {item.kind === "timer" ? (
+                        <ShelfTimer
+                          costume={costume}
+                          item={item}
+                          timerText={timerText}
+                          isRunning={isTimerRunning}
+                          targetTitle={selectedFocusBookTitle}
+                          onOpen={onOpenTimer}
+                          onToggle={onToggleTimer}
+                          isEditing={isEditingTimer}
+                        />
+                      ) : (
+                        <LibraryItemVisual
+                          costume={costume}
+                          item={item}
+                          tasks={tasks}
+                          isTimerRunning={isTimerRunning}
+                          selectedFocusBookTitle={selectedFocusBookTitle}
+                          timerText={timerText}
+                        />
+                      )}
+                    </ItemElement>
                   );
                 })}
 
                 {Array.from({ length: metrics.rowCount }).map((_, row) => {
-                  const shelfTop = getShelfBoardTop(row, metrics);
+                  const shelfTop = presentation.boardTops[row];
 
                   return (
                     <div
@@ -1356,6 +1321,21 @@ export const ShelfScene = ({
                     </div>
                   );
                 })}
+
+                {presentation.timer?.ledgeBoardTop != null ? (
+                  <div
+                    aria-hidden
+                    data-timer-ledge
+                    className="library-shelf-front"
+                    style={{
+                      left: -8,
+                      right: -8,
+                      top: presentation.timer.ledgeBoardTop,
+                      height: SHELF_FRONT_LIP_HEIGHT,
+                      zIndex: 42,
+                    }}
+                  />
+                ) : null}
 
                 {activeDrag && ghostPoint ? (
                   <motion.div
@@ -1384,20 +1364,32 @@ export const ShelfScene = ({
                       mass: 0.45,
                     }}
                     style={{
-                      ...toItemStyle(activeDrag.item, metrics, {
-                        includeAlignmentOffset: false,
-                      }),
+                      width: ghostRect?.width,
+                      height: ghostRect?.height,
                       zIndex: 90,
                     }}
                   >
-                    <LibraryItemVisual
-                      costume={getResolvedCostume(activeDrag.item, wardrobe)}
-                      item={activeDrag.item}
-                      tasks={tasks}
-                      isTimerRunning={isTimerRunning}
-                      selectedFocusBookTitle={selectedFocusBookTitle}
-                      timerText={timerText}
-                    />
+                    {activeDrag.item.kind === "timer" ? (
+                      <ShelfTimer
+                        costume={getResolvedCostume(activeDrag.item, wardrobe)}
+                        item={activeDrag.item}
+                        timerText={timerText}
+                        isRunning={isTimerRunning}
+                        targetTitle={selectedFocusBookTitle}
+                        onOpen={onOpenTimer}
+                        onToggle={onToggleTimer}
+                        isEditing
+                      />
+                    ) : (
+                      <LibraryItemVisual
+                        costume={getResolvedCostume(activeDrag.item, wardrobe)}
+                        item={activeDrag.item}
+                        tasks={tasks}
+                        isTimerRunning={isTimerRunning}
+                        selectedFocusBookTitle={selectedFocusBookTitle}
+                        timerText={timerText}
+                      />
+                    )}
                   </motion.div>
                 ) : null}
               </div>

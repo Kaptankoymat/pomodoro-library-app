@@ -55,6 +55,31 @@ export function LibraryItemVisual({
         <span
           className={`library-book-spine ${costume.contentClassName ?? ""}`}
         >
+          <span aria-hidden="true" className="library-book-leather" />
+          <span aria-hidden="true" className="library-book-page-edge" />
+          <svg
+            aria-hidden="true"
+            focusable="false"
+            className="library-book-tooling"
+            viewBox="0 0 100 400"
+            preserveAspectRatio="none"
+            fill="none"
+          >
+            <path
+              d="M12 28q15 0 15-15h46q0 15 15 15v344q-15 0-15 15H27q0-15-15-15Z"
+              stroke="currentColor"
+              strokeWidth="1.3"
+            />
+            <path
+              d="M19 41q9-4 8-13m54 13q-9-4-8-13M19 359q9 4 8 13m54-13q-9 4-8 13"
+              stroke="currentColor"
+              strokeWidth="1.2"
+            />
+            <path
+              d="m50 18 5 7-5 7-5-7Zm0 350 5 7-5 7-5-7Z"
+              fill="currentColor"
+            />
+          </svg>
           <span
             aria-hidden="true"
             className="library-book-rule library-book-rule--top"
@@ -190,9 +215,19 @@ export function LibraryItemVisual({
           ) : (
             <span className="library-paper-empty">{item.title}</span>
           )}
-          <span aria-hidden="true" className="library-paper-flourish">
-            ❧
-          </span>
+          <svg
+            aria-hidden="true"
+            focusable="false"
+            className="library-paper-flourish"
+            viewBox="0 0 70 24"
+            fill="none"
+          >
+            <path
+              d="M10 17q22 5 48-12M28 17q-11-16-14-6 2 8 14 6Zm12-4q-4-17-9-9-1 7 9 9Zm10-5q2-12 7-7 1 5-7 7Z"
+              stroke="currentColor"
+              strokeWidth="1.1"
+            />
+          </svg>
         </span>
       ) : null}
     </>

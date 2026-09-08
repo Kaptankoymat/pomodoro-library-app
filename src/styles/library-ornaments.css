@@ -1,4 +1,5 @@
 /* Decorative atmosphere. Every ornament is excluded from hit testing and reading order. */
+
 .library-atmosphere,
 .library-ornament,
 .library-night-window,
@@ -12,12 +13,14 @@
   inset: 0;
   overflow: hidden;
 }
+
 .library-ornament {
   display: block;
   width: 100%;
   height: 100%;
   overflow: visible;
 }
+
 .library-night-window {
   position: absolute;
   top: 0;
@@ -26,13 +29,16 @@
   min-height: 680px;
   opacity: 0.85;
 }
+
 .library-night-window--left {
   left: -24px;
 }
+
 .library-night-window--right {
   right: -24px;
   transform: scaleX(-1);
 }
+
 .library-ambient-light {
   position: absolute;
   width: 42vw;
@@ -40,14 +46,17 @@
   border-radius: 50%;
   background: radial-gradient(ellipse, rgb(216 138 42 / 11%), transparent 67%);
 }
+
 .library-ambient-light--left {
   left: -19vw;
   top: 22%;
 }
+
 .library-ambient-light--right {
   right: -18vw;
   top: 4%;
 }
+
 .library-dust {
   position: absolute;
   width: 2px;
@@ -62,30 +71,37 @@
     360px 73px 1px #b1854b;
   animation: library-dust-drift 18s ease-in-out infinite alternate;
 }
+
 .library-dust--one {
   left: 16%;
   top: 18%;
 }
+
 .library-dust--two {
   right: 25%;
   top: 23%;
   animation-delay: -7s;
 }
+
 .library-dust--three {
   left: 39%;
   bottom: 23%;
   animation-delay: -13s;
 }
+
 .library-lamplight {
   animation: library-warm-glow 7s ease-in-out infinite alternate;
   transform-origin: center;
 }
+
 .library-sparkle {
   animation: library-star-shimmer 6s ease-in-out infinite alternate;
 }
+
 .library-vine {
   filter: drop-shadow(3px 5px 3px rgb(0 0 0 / 35%));
 }
+
 .library-book-stack,
 .library-sleeping-cat,
 .library-potted-fern,
@@ -98,23 +114,28 @@
   from {
     opacity: 0.7;
   }
+
   to {
     opacity: 1;
   }
 }
+
 @keyframes library-star-shimmer {
   from {
     opacity: 0.6;
   }
+
   to {
     opacity: 1;
   }
 }
+
 @keyframes library-dust-drift {
   from {
     transform: translateY(0);
     opacity: 0.2;
   }
+
   to {
     transform: translateY(-14px);
     opacity: 0.45;
@@ -122,6 +143,7 @@
 }
 
 /* Wrappers preserve the inventory's coordinates, dimensions, colors and costumes. */
+
 .library-item {
   border: 0;
   padding: 0;
@@ -136,6 +158,7 @@
 .library-item:hover {
   filter: brightness(1.12) var(--tw-drop-shadow,);
 }
+
 .library-item--book {
   border: 1px solid rgb(213 161 79 / 40%);
   border-radius: 3px 5px 3px 2px;
@@ -148,17 +171,21 @@
     inset -4px 0 5px rgb(0 0 0 / 42%),
     3px 3px 5px rgb(0 0 0 / 48%);
 }
+
 .library-item--timer {
   border-radius: var(--library-radius-small);
   background: transparent;
 }
+
 .library-item--painting {
   background: transparent;
   border-radius: 2px;
 }
+
 .library-item--plant {
   background: transparent;
 }
+
 .library-item--sticky {
   background: linear-gradient(
     140deg,
@@ -169,6 +196,7 @@
   border-radius: 1px;
   box-shadow: 2px 6px 9px rgb(0 0 0 / 35%);
 }
+
 .library-costume-overlay {
   position: absolute;
   inset: 0;
@@ -189,22 +217,33 @@
   justify-content: center;
   overflow: hidden;
   border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    rgb(0 0 0 / 22%),
-    transparent 16%,
-    rgb(255 213 138 / 5%) 45%,
-    transparent 72%,
-    rgb(0 0 0 / 28%)
-  );
+  background:
+    radial-gradient(
+      ellipse at 35% 18%,
+      rgb(243 198 115 / 10%),
+      transparent 60%
+    ),
+    linear-gradient(
+      90deg,
+      rgb(0 0 0 / 38%),
+      rgb(255 216 144 / 9%) 10%,
+      transparent 20%,
+      transparent 66%,
+      rgb(0 0 0 / 38%) 90%,
+      rgb(236 200 145 / 8%)
+    );
 }
+
 .library-book-spine::before {
   position: absolute;
-  inset: 5px 4px;
+  inset: 3px 3px;
   border: 1px solid rgb(242 196 109 / 30%);
   border-radius: 1px;
   content: "";
+  border-color: color-mix(in srgb, var(--library-gold) 16%, transparent);
+  box-shadow: inset 0 0 3px rgb(0 0 0 / 35%);
 }
+
 .library-book-title {
   position: relative;
   z-index: 3;
@@ -222,22 +261,41 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   writing-mode: vertical-rl;
-  text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
+  text-shadow:
+    0 1px 1px #120d09,
+    0 0 3px rgb(243 198 115 / 15%);
 }
+
 .library-book-rule {
   position: absolute;
   left: 3px;
   right: 3px;
-  height: 5px;
+  height: 4px;
   border-block: 1px solid rgb(242 196 109 / 67%);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 35%);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 48%),
+    inset 0 1px rgb(244 214 158 / 9%);
+  border-color: color-mix(
+    in srgb,
+    var(--library-gold) 56%,
+    var(--library-brass-dark)
+  );
+  background: linear-gradient(
+    180deg,
+    rgb(15 9 5 / 38%),
+    rgb(235 197 126 / 10%),
+    rgb(15 9 5 / 45%)
+  );
 }
+
 .library-book-rule--top {
   top: 8px;
 }
+
 .library-book-rule--bottom {
   bottom: 7px;
 }
+
 .library-book-emblem {
   position: absolute;
   bottom: 11px;
@@ -246,6 +304,7 @@
   color: var(--library-gold);
   opacity: 0.85;
 }
+
 .library-book-bookmark {
   pointer-events: none;
   position: absolute;
@@ -281,6 +340,7 @@
   container-type: inline-size;
   container-name: library-item-timer;
 }
+
 .library-item-timer-digits {
   position: relative;
   z-index: 3;
@@ -301,6 +361,7 @@
   letter-spacing: 0.015em;
   text-shadow: 0 0 10px rgb(242 196 109 / 28%);
 }
+
 .library-item-timer-description {
   position: relative;
   z-index: 3;
@@ -310,6 +371,7 @@
   flex-direction: column;
   gap: 3px;
 }
+
 .library-item-timer-label {
   color: var(--library-parchment);
   font-family: var(--library-font-display);
@@ -319,6 +381,7 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
+
 .library-item-timer-target {
   overflow: hidden;
   color: var(--library-cream);
@@ -327,6 +390,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .library-item-timer-status {
   display: flex;
   align-items: center;
@@ -335,16 +399,19 @@
   font-size: 8px;
   line-height: 1.2;
 }
+
 .library-item-timer-status i {
   width: 4px;
   height: 4px;
   border-radius: 50%;
   background: #ac6353;
 }
+
 .library-item-timer--running .library-item-timer-status i {
   background: var(--library-success);
   box-shadow: 0 0 5px rgb(166 198 143 / 40%);
 }
+
 .library-item-timer-play {
   position: relative;
   z-index: 3;
@@ -361,20 +428,24 @@
     inset 0 1px 3px rgb(255 245 204 / 50%);
   color: var(--library-wood-dark);
 }
+
 .library-item-timer-play svg {
   width: 18px;
   height: 18px;
 }
+
 .library-item-timer-corner {
   position: absolute;
   color: var(--library-gold);
   font-size: 10px;
   line-height: 1;
 }
+
 .library-item-timer-corner--left {
   top: 2px;
   left: 3px;
 }
+
 .library-item-timer-corner--right {
   right: 3px;
   bottom: 2px;
@@ -384,22 +455,27 @@
   .library-item-timer-label {
     display: none;
   }
+
   .library-item-timer-digits {
     padding: 5px;
     font-size: 21px;
   }
+
   .library-item-timer-play {
     width: 25px;
     height: 25px;
   }
+
   .library-item-timer-play svg {
     width: 14px;
     height: 14px;
   }
+
   .library-item-timer-target {
     font-size: 9px;
   }
 }
+
 @container library-item-timer (max-width: 140px) {
   .library-item-timer-description {
     display: none;
@@ -414,12 +490,14 @@
   align-items: flex-end;
   justify-content: center;
 }
+
 .library-plant-visual .library-potted-fern {
   width: 120%;
   max-width: none;
   height: 100%;
   flex-shrink: 0;
 }
+
 .library-painting-frame {
   position: relative;
   display: flex;
@@ -428,18 +506,28 @@
   padding: 7px;
   border: 2px solid #5b371d;
   border-radius: 2px;
-  background: linear-gradient(
-    135deg,
-    #b38a4e,
-    #5a351e 24%,
-    #ad8247 28%,
-    #563119 32%,
-    #8b6235 96%
-  );
+  background:
+    repeating-linear-gradient(
+      35deg,
+      transparent 0 3px,
+      rgb(242 196 109 / 7%) 3px 4px
+    ),
+    linear-gradient(
+      135deg,
+      #c39a58,
+      #654021 17%,
+      #d1ab69 22%,
+      #704921 26%,
+      #3b2717 33%,
+      #956c37 88%,
+      #d6b16c
+    );
   box-shadow:
-    inset 0 0 0 1px #bc9654,
-    3px 6px 10px rgb(0 0 0 / 44%);
+    inset 0 0 0 1px #d2ad69,
+    inset 0 0 0 3px rgb(43 24 10 / 65%),
+    3px 7px 10px rgb(0 0 0 / 55%);
 }
+
 .library-painting-canvas {
   position: relative;
   display: block;
@@ -448,18 +536,23 @@
   border: 1px solid #281b10;
   background-size: cover;
   background-position: center;
-  box-shadow: inset 0 0 12px rgb(20 11 4 / 55%);
+  box-shadow:
+    inset 0 0 0 1px #d3aa60,
+    inset 0 0 15px rgb(20 11 4 / 65%);
 }
+
 .library-painting-corner {
   position: absolute;
   color: #d4ae64;
   font-size: 12px;
   line-height: 1;
 }
+
 .library-painting-corner--top {
   left: -3px;
   top: -4px;
 }
+
 .library-painting-corner--bottom {
   right: -3px;
   bottom: -4px;
@@ -479,20 +572,32 @@
   container-type: inline-size;
   container-name: library-note;
   color: var(--library-ink);
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 4px,
-    rgb(117 75 29 / 2%) 5px
-  );
+  background:
+    radial-gradient(ellipse at 8% 0, rgb(141 85 30 / 17%), transparent 35%),
+    radial-gradient(
+      ellipse at 100% 100%,
+      rgb(141 85 30 / 15%),
+      transparent 42%
+    ),
+    repeating-linear-gradient(
+      24deg,
+      transparent 0 4px,
+      rgb(117 75 29 / 4%) 4px 5px
+    );
+  box-shadow:
+    inset 0 0 8px rgb(117 75 29 / 14%),
+    inset 0 1px rgb(255 244 202 / 60%);
 }
+
 .library-paper-note::before {
   position: absolute;
   inset: 7px;
-  border: 1px solid rgb(119 78 32 / 24%);
+  border: 1px solid rgb(119 78 32 / 12%);
   content: "";
   pointer-events: none;
+  border-radius: 1px 2px 1px 3px;
 }
+
 .library-paper-fold {
   position: absolute;
   bottom: 0;
@@ -502,6 +607,7 @@
   background: linear-gradient(135deg, #b28e58 50%, #efdaad 51%);
   content: "";
 }
+
 .library-paper-pin {
   position: absolute;
   top: 5px;
@@ -510,9 +616,12 @@
   height: 6px;
   border: 1px solid #8a572a;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 25%, #f1c775, #9a5a25);
-  box-shadow: 0 2px 3px rgb(58 30 18 / 35%);
+  background: radial-gradient(circle at 27% 25%, #ffe3a2, #a06b2d 47%, #64441e);
+  box-shadow:
+    0 2px 3px rgb(58 30 18 / 45%),
+    inset 0 0 0 1px rgb(255 216 155 / 30%);
 }
+
 .library-paper-heading {
   width: 100%;
   flex: 0 0 auto;
@@ -524,6 +633,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .library-paper-tasks {
   display: grid;
   width: 100%;
@@ -531,6 +641,7 @@
   gap: 5px;
   overflow: hidden;
 }
+
 .library-paper-task {
   display: flex;
   min-width: 0;
@@ -541,22 +652,26 @@
   font-weight: 500;
   line-height: 1.3;
 }
+
 .library-paper-task > span:last-child {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .library-paper-checkbox {
   width: 6px;
   height: 6px;
   flex-shrink: 0;
   border: 1px solid #9b794b;
 }
+
 .library-paper-more {
   color: #785631;
   font-size: 9px;
   font-weight: 600;
 }
+
 .library-paper-empty {
   margin-block: auto;
   font-family: var(--library-font-display);
@@ -564,11 +679,15 @@
   line-height: 1.5;
   text-align: center;
 }
+
 .library-paper-flourish {
   position: absolute;
   bottom: 1px;
-  color: #936d38;
+  color: var(--library-ink);
   font-size: 15px;
+  width: 35px;
+  height: 14px;
+  opacity: 0.7;
 }
 
 @media (max-width: 1023px) {
@@ -576,85 +695,171 @@
     width: 140px;
     opacity: 0.4;
   }
+
   .library-dust--three {
     display: none;
   }
 }
+
 @media (max-width: 639px) {
   .library-night-window {
     width: 120px;
     opacity: 0.27;
   }
+
   .library-night-window--left {
     left: -55px;
   }
+
   .library-night-window--right {
     right: -55px;
   }
+
   .library-dust {
     display: none;
   }
+
   .library-book-title {
     font-size: 12px;
   }
 }
 
 /* Asset variants retain their decorative hooks without masking the task text. */
+
 .library-item--sticky:has([data-costume-id="sticky:arcane"]) {
   background: linear-gradient(135deg, #d7bfda, #e8c993);
 }
+
 .library-item--sticky:has([data-costume-id="sticky:secret"]) {
   background: linear-gradient(135deg, #f0e6d1, #e8c993);
 }
+
 .library-upright-books,
 .library-hourglass,
 .library-crystals {
   filter: drop-shadow(3px 5px 3px rgb(0 0 0 / 32%));
 }
+
 .library-glass-jar {
   filter: drop-shadow(0 0 6px rgb(242 196 109 / 11%));
 }
+
 .library-magic-lamp {
   filter: drop-shadow(0 0 12px rgb(242 196 109 / 12%));
 }
+
 @container library-note (max-width: 65px) {
   .library-paper-heading {
     display: none;
   }
+
   .library-paper-empty {
     font-size: 10px;
     line-height: 1.25;
     overflow-wrap: anywhere;
   }
+
   .library-paper-tasks {
     gap: 3px;
   }
+
   .library-paper-task {
     font-size: 8px;
     gap: 3px;
   }
+
   .library-paper-checkbox {
     width: 4px;
     height: 4px;
   }
+
   .library-paper-more {
     font-size: 8px;
   }
 }
+
 .library-item--sticky:has(.library-paper-note) {
   container-type: inline-size;
   container-name: library-note-wrapper;
 }
+
 @container library-note-wrapper (max-width: 65px) {
   .library-paper-note {
     padding: 15px 5px 9px;
     gap: 2px;
   }
+
   .library-paper-note::before {
     inset: 4px;
   }
+
   .library-paper-flourish {
     font-size: 10px;
     bottom: 0;
+    width: 21px;
+    height: 9px;
   }
+}
+
+.library-enchanted-star {
+  filter: drop-shadow(
+    0 0 2px color-mix(in srgb, var(--library-gold) 65%, transparent)
+  );
+}
+
+.library-botanical-cloche,
+.library-antique-lantern {
+  filter: drop-shadow(
+    2px 5px 3px color-mix(in srgb, var(--library-shadow-color) 48%, transparent)
+  );
+}
+
+.library-night-window--right .library-window-moon {
+  opacity: 0.35;
+}
+
+.library-window-hanging-stars {
+  filter: drop-shadow(
+    0 0 6px color-mix(in srgb, var(--library-amber) 38%, transparent)
+  );
+}
+
+.library-book-leather {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.65;
+  background-image:
+    radial-gradient(
+      ellipse 1px 0.6px at 2px 3px,
+      rgb(239 201 139 / 17%),
+      transparent
+    ),
+    radial-gradient(ellipse 0.8px 1px at 5px 6px, rgb(0 0 0 / 30%), transparent);
+  background-size:
+    7px 9px,
+    11px 13px;
+}
+
+.library-book-tooling {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: color-mix(in srgb, var(--library-gold) 64%, var(--library-brass-dark));
+  opacity: 0.9;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 0 rgb(0 0 0 / 40%));
+}
+
+.library-book-page-edge {
+  position: absolute;
+  right: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  background: repeating-linear-gradient(0deg, #b6a17c 0 1px, #6b5236 1px 2px);
+  opacity: 0.4;
+  box-shadow: -1px 0 2px rgb(0 0 0 / 65%);
+  pointer-events: none;
 }

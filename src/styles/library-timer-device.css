@@ -1,0 +1,280 @@
+/* One large physical device, shared by the desktop and stacked shelves. */
+.shelf-timer-device {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  height: 100%;
+  padding: 17px 25px;
+  border: 3px solid var(--library-brass-dark);
+  border-radius: 11px;
+  background:
+    radial-gradient(
+      ellipse at 85% 65%,
+      color-mix(in srgb, var(--library-amber) 18%, transparent),
+      transparent 65%
+    ),
+    linear-gradient(
+      120deg,
+      color-mix(in srgb, var(--library-wood-mid) 92%, transparent),
+      color-mix(in srgb, var(--library-wood-recess) 96%, transparent)
+    ),
+    var(--library-wood-texture) center/320px;
+  color: var(--library-parchment);
+  box-shadow:
+    0 3px 0 var(--library-wood-recess),
+    0 6px 0 var(--library-brass-dark),
+    0 12px 18px color-mix(in srgb, var(--library-shadow-color) 60%, transparent),
+    inset 0 1px var(--library-metal-highlight),
+    inset 0 0 0 4px var(--library-wood-shade),
+    inset 0 0 0 5px var(--library-brass-dark),
+    var(--tw-ring-shadow, 0 0 #0000);
+  isolation: isolate;
+}
+.shelf-timer-device::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border: 1px solid var(--library-border-bright);
+  border-radius: 7px;
+  pointer-events: none;
+  z-index: -1;
+}
+.shelf-timer-costume {
+  position: absolute;
+  inset: 4px;
+  border-radius: 8px;
+  background-position: center;
+  background-size: 100% 100%;
+  opacity: 0.55;
+  z-index: -1;
+  pointer-events: none;
+}
+.shelf-timer-filigree {
+  position: absolute;
+  color: var(--library-gold);
+  font-family: var(--library-font-display);
+  font-size: 17px;
+  line-height: 1;
+  left: calc(50% - 10px);
+  pointer-events: none;
+  text-shadow: 0 1px var(--library-wood-recess);
+}
+.shelf-timer-filigree--left {
+  top: 5px;
+}
+.shelf-timer-filigree--right {
+  bottom: 3px;
+  transform: rotate(180deg);
+}
+.shelf-timer-corner {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--library-brass);
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow:
+    inset 0 1px var(--library-gold),
+    0 1px var(--library-wood-recess);
+}
+.shelf-timer-corner::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  background: var(--library-gold);
+  border-radius: 50%;
+}
+.shelf-timer-corner--tl {
+  top: 1px;
+  left: 1px;
+}
+.shelf-timer-corner--tr {
+  top: 1px;
+  right: 1px;
+}
+.shelf-timer-corner--bl {
+  bottom: 1px;
+  left: 1px;
+}
+.shelf-timer-corner--br {
+  bottom: 1px;
+  right: 1px;
+}
+.shelf-timer-display {
+  flex: none;
+  min-width: 158px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 12px 7px;
+  border: 1px solid var(--library-brass-dark);
+  border-radius: 7px;
+  background: linear-gradient(
+    var(--library-wood-recess),
+    var(--library-wood-shade)
+  );
+  box-shadow:
+    inset 0 3px 8px var(--library-shadow-color),
+    0 1px color-mix(in srgb, var(--library-gold) 30%, transparent);
+}
+.shelf-timer-display .library-focus-time {
+  color: var(--library-gold);
+  font-family: ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 42px;
+  line-height: 1.12;
+  letter-spacing: 0.025em;
+  text-shadow: 0 0 13px
+    color-mix(in srgb, var(--library-amber) 38%, transparent);
+}
+.shelf-timer-caption {
+  color: var(--library-text-muted);
+  font-size: 7px;
+  line-height: 1.5;
+  letter-spacing: 0.12em;
+  margin-top: 3px;
+}
+.shelf-timer-details {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+.shelf-timer-label {
+  font-family: var(--library-font-display);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--library-gold);
+}
+.shelf-timer-details strong {
+  font-family: var(--library-font-display);
+  font-weight: 400;
+  font-size: 17px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shelf-timer-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--library-text-muted);
+  font-family: var(--library-font-display);
+  font-size: 12px;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+.shelf-timer-status-light {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--library-burgundy);
+  border: 1px solid var(--library-brass-dark);
+}
+.shelf-timer-device[data-running="true"] .shelf-timer-status-light {
+  background: var(--library-gold);
+  box-shadow: 0 0 9px var(--library-amber);
+}
+.shelf-timer-play {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border: 2px solid var(--library-gold);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--library-wood);
+  background: radial-gradient(
+    circle at 35% 30%,
+    var(--library-metal-highlight),
+    var(--library-brass)
+  );
+  box-shadow:
+    0 0 14px color-mix(in srgb, var(--library-amber) 40%, transparent),
+    inset 0 0 0 3px var(--library-brass-dark),
+    0 3px 4px var(--library-shadow-color);
+}
+.shelf-timer-play:hover:not(:disabled) {
+  box-shadow:
+    0 0 22px color-mix(in srgb, var(--library-gold) 55%, transparent),
+    inset 0 0 0 3px var(--library-brass-dark);
+}
+.shelf-timer-play:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.shelf-timer-error {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  left: 0;
+  z-index: 10;
+  padding: 8px 12px;
+  border: 1px solid var(--library-danger);
+  border-radius: 5px;
+  background: var(--library-wood-dark);
+  color: var(--library-danger);
+  font-size: 12px;
+}
+.shelf-timer-device[data-editing="true"] {
+  pointer-events: none;
+}
+@media (max-width: 600px) {
+  .shelf-timer-device {
+    padding: 17px 17px;
+    gap: 13px;
+  }
+  .shelf-timer-display {
+    min-width: 122px;
+    padding: 8px;
+  }
+  .shelf-timer-display .library-focus-time {
+    font-size: 34px;
+  }
+  .shelf-timer-play {
+    width: 48px;
+    height: 48px;
+  }
+  .shelf-timer-details strong {
+    font-size: 15px;
+  }
+  .shelf-timer-label {
+    font-size: 9px;
+  }
+  .shelf-timer-mode {
+    font-size: 11px;
+  }
+}
+@media (max-width: 370px) {
+  .shelf-timer-device {
+    padding: 16px 13px;
+    gap: 9px;
+  }
+  .shelf-timer-display {
+    min-width: 102px;
+    padding: 8px 6px;
+  }
+  .shelf-timer-display .library-focus-time {
+    font-size: 28px;
+  }
+  .shelf-timer-play {
+    width: 44px;
+    height: 44px;
+  }
+  .shelf-timer-details strong {
+    font-size: 13px;
+  }
+  .shelf-timer-label {
+    font-size: 8px;
+    letter-spacing: 0.04em;
+  }
+  .shelf-timer-caption {
+    font-size: 6px;
+  }
+}

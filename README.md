@@ -60,7 +60,7 @@ Tarayıcı testleri 3100 portunda üretim sunucusunu açar. İki sekmeli çalı�
 
 ## Görünüm ve mobil kullanım
 
-Ahşap raflar ve büyük odak saatiyle birlikte notlar, görevler, raf yönetimi ve kostümler ortak bir kütüphane temasını kullanır. Telefonda **Rafı düzenle** ile bir nesne seçip konumunu değiştirebilirsiniz; masaüstünde sürükleme devam eder. Ekran boyutu kayıtlı raf düzenini değiştirmez.
+Ahşap raflar ve rafın içinde taşınabilen büyük odak saatiyle birlikte notlar, görevler, raf yönetimi ve kostümler ortak bir kütüphane temasını kullanır. Telefonda **Rafı düzenle** ile bir nesne seçip konumunu değiştirebilirsiniz; masaüstünde sürükleme devam eder. Ekran boyutu kayıtlı raf düzenini değiştirmez.
 
 Bileşenler, tema katmanları ve ekran görüntüleri için [tasarım notlarına](./docs/tasarim.md) bakın.
 

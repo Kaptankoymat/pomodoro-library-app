@@ -1,8 +1,53 @@
 /* Mobile shelves keep their own readable composition; no saved grid is resized. */
 .mobile-library-scene {
+  position: relative;
+  isolation: isolate;
   width: 100%;
   min-width: 0;
+  border: 1px solid var(--library-wood-shade);
+  border-top: 0;
+  border-radius: 0 0 5px 5px;
+  background: var(--library-wood-mid);
+  box-shadow:
+    0 16px 30px color-mix(in srgb, var(--library-shadow-color) 40%, transparent),
+    inset 0 1px color-mix(in srgb, var(--library-gold) 17%, transparent);
   color: var(--library-cream);
+}
+
+.mobile-library-scene::before,
+.mobile-library-scene::after {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  border-inline: 1px solid
+    color-mix(in srgb, var(--library-wood-highlight) 55%, transparent);
+  background:
+    linear-gradient(
+      90deg,
+      var(--library-wood-shade),
+      var(--library-wood-light) 30%,
+      var(--library-wood-mid) 50%,
+      var(--library-wood-dark)
+    ),
+    var(--library-wood-texture);
+  background-size:
+    auto,
+    110px auto;
+  background-blend-mode: multiply;
+  box-shadow: 3px 0 8px
+    color-mix(in srgb, var(--library-shadow-color) 45%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.mobile-library-scene::before {
+  left: 0;
+}
+.mobile-library-scene::after {
+  right: 0;
+  transform: scaleX(-1);
 }
 
 .mobile-library-toolbar,
@@ -15,7 +60,24 @@
 }
 
 .mobile-library-toolbar {
-  padding: 0 4px 12px;
+  position: relative;
+  min-height: 62px;
+  padding: 9px 19px;
+  border-block: 1px solid
+    color-mix(in srgb, var(--library-brass) 42%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--library-wood-highlight) 48%, transparent),
+      transparent 20%,
+      var(--library-wood-dark)
+    ),
+    var(--library-wood-texture) center / 380px auto;
+  background-color: var(--library-wood-mid);
+  background-blend-mode: normal, multiply;
+  box-shadow:
+    inset 0 3px 2px color-mix(in srgb, var(--library-gold) 13%, transparent),
+    0 7px 12px color-mix(in srgb, var(--library-shadow-color) 42%, transparent);
 }
 
 .mobile-library-toolbar .library-button {
@@ -25,7 +87,9 @@
 }
 
 .mobile-library-instruction {
-  margin: 0 0 14px;
+  margin: 0;
+  padding: 12px 20px;
+  background: var(--library-wood-dark);
   color: var(--library-parchment);
   font-size: 13px;
   line-height: 1.5;
@@ -34,49 +98,94 @@
 .mobile-library-case {
   position: relative;
   min-width: 0;
-  border: 7px solid var(--library-wood-mid);
-  border-top-width: 12px;
-  border-radius: 7px 7px 3px 3px;
+  margin-inline: 9px;
+  border-bottom: 8px solid var(--library-wood-mid);
   background: var(--library-wood-dark);
   box-shadow:
-    0 0 0 1px var(--library-wood-light),
-    0 10px 30px #08040280,
-    inset 0 0 30px #08040280;
+    inset 0 0 22px
+      color-mix(in srgb, var(--library-shadow-color) 55%, transparent),
+    0 2px 0 var(--library-wood-highlight);
 }
 
 .mobile-library-row {
   position: relative;
   min-width: 0;
-  padding: 22px 14px 9px;
-  border-bottom: 13px solid var(--library-wood-mid);
+  padding: 27px 10px 26px;
   background:
-    radial-gradient(ellipse at 50% 0, #d88a2a12, transparent 72%),
+    radial-gradient(
+      ellipse at 70% 10%,
+      color-mix(in srgb, var(--library-amber) 16%, transparent),
+      transparent 65%
+    ),
     repeating-linear-gradient(
       90deg,
-      transparent 0 89px,
-      #08040224 90px,
-      transparent 92px
+      transparent 0 88px,
+      color-mix(in srgb, var(--library-wood-recess) 45%, transparent) 89px,
+      color-mix(in srgb, var(--library-wood-highlight) 12%, transparent) 90px,
+      transparent 91px
     ),
-    linear-gradient(180deg, #10080460, transparent 25%, #10080450);
+    linear-gradient(
+      180deg,
+      var(--library-wood-shade),
+      transparent 35%,
+      var(--library-wood-dark)
+    ),
+    var(--library-wood-texture) center / 440px auto;
+  background-color: var(--library-wood);
+  background-blend-mode: normal, normal, normal, multiply;
   box-shadow:
-    inset 0 9px 18px #08040270,
-    0 2px 0 var(--library-wood-light);
+    inset 0 13px 20px
+      color-mix(in srgb, var(--library-shadow-color) 48%, transparent),
+    inset 9px 0 13px
+      color-mix(in srgb, var(--library-shadow-color) 18%, transparent),
+    inset -9px 0 13px
+      color-mix(in srgb, var(--library-shadow-color) 18%, transparent);
+}
+
+.mobile-library-row::before {
+  position: absolute;
+  top: 0;
+  right: 6%;
+  left: 6%;
+  height: 36px;
+  background: radial-gradient(
+    ellipse at 50% 0,
+    color-mix(in srgb, var(--library-lamplight) 15%, transparent),
+    transparent 72%
+  );
+  content: "";
+  pointer-events: none;
 }
 
 .mobile-library-row::after {
   position: absolute;
   right: 0;
-  bottom: -3px;
+  bottom: 0;
   left: 0;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, #f2c46d42, transparent);
+  height: 18px;
+  border-top: 1px solid color-mix(in srgb, var(--library-gold) 50%, transparent);
+  border-bottom: 2px solid var(--library-wood-shade);
+  background:
+    linear-gradient(
+      180deg,
+      var(--library-wood-highlight),
+      var(--library-wood-mid) 16%,
+      var(--library-wood-dark) 34%,
+      var(--library-wood-mid) 56%,
+      var(--library-wood-shade)
+    ),
+    var(--library-wood-texture) center / 420px auto;
+  background-blend-mode: multiply;
+  box-shadow:
+    0 5px 10px color-mix(in srgb, var(--library-shadow-color) 48%, transparent),
+    inset 0 2px color-mix(in srgb, var(--library-gold) 20%, transparent);
   content: "";
   pointer-events: none;
 }
 
 .mobile-library-row-label {
   position: absolute;
-  top: 6px;
+  top: 7px;
   right: 10px;
   color: var(--library-text-muted);
   font-family: var(--library-font-display);
@@ -198,12 +307,27 @@
 }
 
 .mobile-library-entry--timer .mobile-library-object-space {
-  height: 82px;
+  height: 122px;
+  margin-bottom: 12px;
 }
 
 .mobile-library-object.library-item--timer {
-  width: min(100%, 330px);
-  height: 78px;
+  width: min(100%, 490px);
+  height: 118px;
+  filter: drop-shadow(
+    0 0 16px color-mix(in srgb, var(--library-amber) 12%, transparent)
+  );
+}
+
+.mobile-library-timer {
+  width: min(100%, 490px);
+  height: 118px;
+  margin-inline: auto;
+  cursor: pointer;
+}
+
+.mobile-library-row[data-has-timer="true"] {
+  padding-inline: 4px;
 }
 
 .mobile-library-item-title {
@@ -332,13 +456,25 @@
 }
 
 @media (min-width: 540px) {
+  .mobile-library-scene::before,
+  .mobile-library-scene::after {
+    width: 15px;
+  }
+
   .mobile-library-case {
-    border-right-width: 12px;
-    border-left-width: 12px;
+    margin-inline: 14px;
+  }
+
+  .mobile-library-toolbar {
+    padding-inline: 30px;
   }
 
   .mobile-library-row {
-    padding: 26px 26px 14px;
+    padding: 30px 24px 31px;
+  }
+
+  .mobile-library-row[data-has-timer="true"] {
+    padding-block: 30px;
   }
 
   .mobile-library-objects {
