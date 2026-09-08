@@ -1,0 +1,244 @@
+/* The library's materials live here so cosmetics can extend the scene. */
+:root {
+  --library-wood-dark: #24130d;
+  --library-wood: #3a1e12;
+  --library-wood-mid: #5a301c;
+  --library-wood-light: #744526;
+  --library-amber: #d88a2a;
+  --library-brass: #b98b48;
+  --library-gold: #f2c46d;
+  --library-parchment: #e8c993;
+  --library-cream: #f3e5c5;
+  --library-text-muted: #bba78a;
+  --library-ink: #392415;
+  --library-night: #151c30;
+  --library-wood-texture: url("/wood_texture.png");
+  --library-navy: #183a56;
+  --library-emerald: #175240;
+  --library-burgundy: #742b38;
+  --library-purple: #503568;
+  --library-danger: #e49c8c;
+  --library-success: #a6c68f;
+  /* Derived materials follow the base palette when a future room theme changes. */
+  --library-wood-shade: color-mix(in srgb, var(--library-wood-dark) 78%, black);
+  --library-wood-recess: color-mix(
+    in srgb,
+    var(--library-wood-dark) 56%,
+    black
+  );
+  --library-wood-grain: color-mix(
+    in srgb,
+    var(--library-wood) 70%,
+    var(--library-wood-dark)
+  );
+  --library-wood-polish: color-mix(
+    in srgb,
+    var(--library-wood) 50%,
+    var(--library-wood-mid)
+  );
+  --library-wood-edge: color-mix(
+    in srgb,
+    var(--library-wood-mid) 65%,
+    var(--library-wood-light)
+  );
+  --library-wood-highlight: color-mix(
+    in srgb,
+    var(--library-wood-light) 78%,
+    var(--library-amber)
+  );
+  --library-brass-dark: color-mix(
+    in srgb,
+    var(--library-brass) 70%,
+    var(--library-wood-mid)
+  );
+  --library-metal-highlight: color-mix(
+    in srgb,
+    var(--library-gold) 50%,
+    var(--library-cream)
+  );
+  --library-lamplight: color-mix(
+    in srgb,
+    var(--library-gold) 62%,
+    var(--library-amber)
+  );
+  --library-shadow-color: color-mix(
+    in srgb,
+    var(--library-wood-dark) 20%,
+    black
+  );
+  --library-font-display: Georgia, Cambria, "Times New Roman", serif;
+  --library-font-body:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --library-border: color-mix(in srgb, var(--library-gold) 28%, transparent);
+  --library-border-bright: color-mix(
+    in srgb,
+    var(--library-gold) 58%,
+    transparent
+  );
+  --library-radius: 12px;
+  --library-radius-small: 6px;
+  --library-shadow:
+    0 18px 56px color-mix(in srgb, var(--library-shadow-color) 46%, transparent),
+    inset 0 1px color-mix(in srgb, var(--library-gold) 12%, transparent);
+  --library-shadow-raised:
+    0 4px 10px color-mix(in srgb, var(--library-shadow-color) 40%, transparent),
+    inset 0 1px color-mix(in srgb, var(--library-gold) 19%, transparent);
+  --library-transition: 160ms ease;
+  --library-space-1: 4px;
+  --library-space-2: 8px;
+  --library-space-3: 12px;
+  --library-space-4: 16px;
+  --library-space-6: 24px;
+  --library-space-8: 32px;
+}
+
+.library-button {
+  display: inline-flex;
+  min-height: 42px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: var(--library-space-2);
+  padding: 9px 15px;
+  border: 1px solid var(--library-border);
+  border-radius: var(--library-radius-small);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--library-wood-light) 46%, transparent),
+    color-mix(in srgb, var(--library-wood-dark) 82%, transparent)
+  );
+  box-shadow: var(--library-shadow-raised);
+  color: var(--library-cream);
+  font-family: var(--library-font-body);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color var(--library-transition),
+    background-color var(--library-transition),
+    box-shadow var(--library-transition),
+    transform var(--library-transition);
+}
+
+.library-button:hover:not(:disabled) {
+  border-color: var(--library-border-bright);
+  background-color: color-mix(in srgb, var(--library-amber) 14%, transparent);
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--library-amber) 12%, transparent),
+    var(--library-shadow-raised);
+}
+
+.library-button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 7px
+    color-mix(in srgb, var(--library-shadow-color) 45%, transparent);
+}
+
+.library-button--primary {
+  border-color: var(--library-border-bright);
+  background: linear-gradient(
+    180deg,
+    var(--library-wood-light),
+    var(--library-wood-polish)
+  );
+  color: var(--library-gold);
+}
+
+.library-button--quiet {
+  background: color-mix(in srgb, var(--library-wood-shade) 32%, transparent);
+  box-shadow: inset 0 1px
+    color-mix(in srgb, var(--library-gold) 4%, transparent);
+}
+
+.library-button--icon {
+  width: 42px;
+  padding: 9px;
+}
+
+.library-button:disabled,
+.library-button[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.library-panel {
+  border: 1px solid var(--library-border);
+  border-radius: var(--library-radius);
+  background:
+    radial-gradient(
+      ellipse at 20% 0%,
+      color-mix(in srgb, var(--library-wood-light) 22%, transparent),
+      transparent 70%
+    ),
+    var(--library-wood-dark);
+  box-shadow: var(--library-shadow);
+  color: var(--library-cream);
+}
+
+.library-field {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 11px 13px;
+  border: 1px solid var(--library-border);
+  border-radius: var(--library-radius-small);
+  background: color-mix(in srgb, var(--library-wood-recess) 46%, transparent);
+  box-shadow: inset 0 2px 6px
+    color-mix(in srgb, var(--library-shadow-color) 18%, transparent);
+  color: var(--library-cream);
+  font-family: var(--library-font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  accent-color: var(--library-amber);
+  transition:
+    border-color var(--library-transition),
+    box-shadow var(--library-transition);
+}
+
+.library-field::placeholder {
+  color: var(--library-text-muted);
+  opacity: 0.8;
+}
+.library-field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.library-field option {
+  background: var(--library-wood-dark);
+  color: var(--library-cream);
+}
+
+.library-eyebrow {
+  color: var(--library-gold);
+  font-family: var(--library-font-body);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+}
+
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--library-gold);
+  outline-offset: 4px;
+}
+
+.library-field:focus-visible {
+  outline-offset: 2px;
+  border-color: var(--library-gold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

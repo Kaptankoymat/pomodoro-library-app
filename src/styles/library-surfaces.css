@@ -1,0 +1,278 @@
+.library-task-panel {
+  display: flex;
+  flex-direction: column;
+  max-width: 540px;
+  max-height: calc(100dvh - 2 * clamp(0.75rem, 3vw, 2rem));
+}
+.library-task-panel .library-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.library-task-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 26px;
+  border-block: 1px solid var(--library-border);
+  font-size: 11px;
+  color: var(--library-text-muted);
+}
+.library-task-summary > span:last-child {
+  color: var(--library-gold);
+}
+.library-task-body {
+  display: grid;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+  gap: 16px;
+}
+.library-task-summary,
+.library-task-footer {
+  flex-shrink: 0;
+}
+.library-task-form {
+  display: flex;
+  gap: 9px;
+}
+.library-task-form .library-field {
+  min-width: 0;
+  flex: 1;
+}
+.library-task-list {
+  display: grid;
+  gap: 8px;
+}
+.library-task-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  text-align: left;
+  padding: 14px;
+  border: 1px solid var(--library-border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--library-wood-dark) 75%, transparent);
+  color: var(--library-cream);
+  font-size: 13px;
+  line-height: 1.55;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+.library-task-row:hover {
+  border-color: var(--library-gold);
+  background: var(--library-wood);
+}
+.library-task-row > span:last-child {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.library-task-row[aria-pressed="true"] {
+  color: var(--library-text-muted);
+  background: color-mix(
+    in srgb,
+    var(--library-emerald) 12%,
+    var(--library-wood-dark)
+  );
+}
+.library-task-row[aria-pressed="true"] > span:last-child {
+  text-decoration: line-through;
+}
+.library-task-check {
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 1px solid var(--library-border);
+  border-radius: 4px;
+  color: var(--library-gold);
+}
+.library-task-row[aria-pressed="true"] .library-task-check {
+  border-color: var(--library-gold);
+}
+.library-task-footer {
+  font-size: 9px;
+  letter-spacing: 0.17em;
+  text-align: center;
+  padding: 18px;
+  border-top: 1px solid var(--library-border);
+  color: var(--library-text-muted);
+}
+.library-add-popover > .library-eyebrow {
+  padding: 10px 9px;
+  font-size: 9px;
+}
+.library-wardrobe {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  width: 330px;
+  max-height: calc(100dvh - 130px);
+  z-index: 72;
+  padding: 20px;
+  overflow-y: auto;
+}
+.library-wardrobe-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  justify-content: space-between;
+}
+.library-wardrobe h2 {
+  font-family: var(--library-font-display);
+  font-size: 25px;
+  color: var(--library-gold);
+  margin: 4px 0;
+}
+.library-wardrobe p {
+  color: var(--library-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.library-wardrobe > .library-eyebrow {
+  font-size: 9px;
+}
+.library-wardrobe-selection {
+  margin-top: 18px;
+  padding: 13px;
+  border: 1px solid var(--library-border);
+  border-radius: 6px;
+  background: var(--library-wood-dark);
+}
+.library-wardrobe-selection strong {
+  font-family: var(--library-font-display);
+  color: var(--library-parchment);
+  display: block;
+  font-size: 17px;
+}
+.library-wardrobe-scopes {
+  display: flex;
+  gap: 6px;
+  margin-top: 16px;
+}
+.library-wardrobe-scopes .library-button {
+  flex: 1;
+  min-height: 36px;
+  font-size: 11px;
+  padding: 7px;
+}
+.library-costume-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.library-costume-card {
+  min-width: 0;
+  border: 1px solid var(--library-border);
+  border-radius: 6px;
+  padding: 9px 6px;
+  background: var(--library-wood-dark);
+  color: var(--library-cream);
+  text-align: left;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.library-costume-card:hover,
+.library-costume-card[aria-pressed="true"] {
+  border-color: var(--library-gold);
+  background: var(--library-wood);
+}
+.library-costume-card > strong {
+  display: block;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.library-costume-card > small {
+  display: block;
+  font-size: 10px;
+  color: var(--library-text-muted);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.library-costume-swatch {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 50px;
+  border: 1px solid var(--library-border);
+  border-radius: 3px;
+  margin-bottom: 9px;
+  background: linear-gradient(
+    145deg,
+    var(--library-wood-mid),
+    var(--library-wood-dark)
+  );
+  color: var(--library-gold);
+}
+.library-wardrobe .library-button--primary {
+  width: 100%;
+  margin-top: 16px;
+}
+.library-costume-hint {
+  margin-top: 14px;
+  border-top: 1px solid var(--library-border);
+  padding-top: 13px;
+}
+.library-wardrobe .library-button--icon {
+  min-width: 35px;
+  width: 35px;
+  height: 35px;
+  min-height: 35px;
+}
+@media (max-width: 900px) {
+  .library-wardrobe {
+    top: auto;
+    bottom: 190px;
+    right: 12px;
+    width: min(330px, calc(100vw - 24px));
+    max-height: calc(100dvh - 210px);
+  }
+  .library-wardrobe[data-selected="false"] {
+    padding: 15px;
+  }
+  .library-wardrobe-empty {
+    margin-top: 10px;
+  }
+  .library-task-summary {
+    padding-inline: 20px;
+  }
+}
+
+.library-wardrobe-scopes [aria-pressed="true"] {
+  border-color: var(--library-gold);
+  background: var(--library-wood-mid);
+  color: var(--library-gold);
+}
+.library-costume-hint > strong {
+  color: var(--library-parchment);
+  font-family: var(--library-font-display);
+  font-size: 17px;
+}
+.library-costume-hint > small {
+  font-size: 10px;
+  color: var(--library-text-muted);
+}
+
+.library-shelf-title {
+  text-align: center;
+}
+.library-shelf-title-error {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  border: 1px solid var(--library-danger);
+  border-radius: 5px;
+  background: var(--library-wood-dark);
+  color: var(--library-danger);
+  padding: 9px;
+  font-size: 11px;
+  line-height: 1.5;
+}

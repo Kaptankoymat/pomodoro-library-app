@@ -8,7 +8,6 @@ import {
   formatRelativeStudyDate,
   type BookStudyStats,
 } from "@/lib/libraryStats";
-import { libraryTheme } from "@/lib/libraryTheme";
 import { getXpIntoLevel, XP_PER_LEVEL } from "@/lib/libraryProgression";
 
 export type EditableBook = {
@@ -117,11 +116,11 @@ export const BookNoteDialog = ({
   return (
     <LibraryDialog
       aria-label={`${book.title} çalışma defteri`}
-      className="fixed inset-0 z-[80] overflow-y-auto bg-[#140f0b]/88 px-3 py-3 backdrop-blur-md sm:px-5 sm:py-5"
+      className="library-dialog--notebook"
       onClose={confirmDiscard ? cancelDiscard : requestClose}
     >
       <form
-        className={`mx-auto grid min-h-[calc(100dvh-1.5rem)] w-full max-w-6xl grid-rows-[auto_1fr_auto] rounded-md border shadow-2xl shadow-black/45 sm:min-h-[calc(100dvh-2.5rem)] ${libraryTheme.current.panel}`}
+        className="library-panel library-dialog-panel library-notebook"
         aria-busy={pendingAction !== null}
         onKeyDown={(event) => {
           if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.nativeEvent.isComposing) {
@@ -134,17 +133,17 @@ export const BookNoteDialog = ({
           void saveDraft("save");
         }}
       >
-        <header className="flex flex-col gap-4 border-b border-[#bba88c] px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
-          <div className="min-w-0 flex-1">
-            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[#8a6040]">
+        <header className="library-dialog-header">
+          <div className="library-dialog-heading">
+            <div className="library-eyebrow">
               <BookOpen aria-hidden className="h-4 w-4" />
               Çalışma defteri
             </div>
-            <label className="block" htmlFor={titleInputId}>
+            <label className="library-notebook-title-label" htmlFor={titleInputId}>
               <span className="sr-only">Kitap adı</span>
               <input
                 id={titleInputId}
-                className="w-full border-0 bg-transparent p-0 text-3xl font-bold leading-tight text-[#2f251b] outline-none placeholder:text-[#8b7965] sm:text-5xl"
+                className="library-notebook-title"
                 maxLength={64}
                 disabled={pendingAction !== null}
                 placeholder="Kitap adı"
@@ -153,14 +152,13 @@ export const BookNoteDialog = ({
                 onChange={(event) => setDraftTitle(event.target.value)}
               />
             </label>
-            <p className="mt-2 text-sm text-[#6e5c47]">
+            <p className="library-dialog-description">
               Konu, proje veya okuma notlarını burada tut.
             </p>
           </div>
-
           <button
             aria-label="Kapat"
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] ${libraryTheme.current.secondaryButton} ${libraryTheme.current.focusRing}`}
+            className="library-button library-button--quiet library-dialog-close"
             title="Kapat"
             type="button"
             disabled={pendingAction !== null}
@@ -170,58 +168,48 @@ export const BookNoteDialog = ({
           </button>
         </header>
 
-        <main className="grid min-w-0 gap-5 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)] lg:px-6">
-          <aside className="grid min-w-0 content-start gap-3">
-            <div className="rounded-md border border-[#bba88c] bg-[#efe3d0] p-4">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-[#6e5c47]">Seviye</span>
-                <span className="font-bold text-[#2f251b]">Lv {book.level}</span>
+        <main className="library-notebook-body">
+          <aside className="library-notebook-stats">
+            <div className="library-dialog-inset library-notebook-level">
+              <BookOpen aria-hidden className="library-notebook-emblem" />
+              <div className="library-stat-row">
+                <span>Seviye</span>
+                <strong>Lv {book.level}</strong>
               </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#d2c0a1]">
-                <div
-                  className="h-full rounded-full bg-[#8a6040]"
-                  style={{ width: `${(bookXp / XP_PER_LEVEL) * 100}%` }}
-                />
+              <div className="library-meter" aria-hidden="true">
+                <div className="library-meter-fill" style={{ width: `${(bookXp / XP_PER_LEVEL) * 100}%` }} />
               </div>
-              <div className="mt-2 text-xs text-[#6e5c47]">{bookXp}/{XP_PER_LEVEL} XP</div>
+              <p className="library-stat-caption">{bookXp}/{XP_PER_LEVEL} XP</p>
             </div>
 
-            <div className="grid gap-2 rounded-md border border-[#bba88c] bg-[#efe3d0] p-4 text-sm text-[#4a3b2c]">
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2">
-                  <Timer aria-hidden className="h-4 w-4 text-[#8a6040]" />
-                  Tamamlanan seans
-                </span>
+            <div className="library-dialog-inset library-notebook-summary">
+              <div className="library-stat-row">
+                <span><Timer aria-hidden className="h-4 w-4" />Tamamlanan seans</span>
                 <strong>{stats.totalSessions}</strong>
               </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2">
-                  <Clock aria-hidden className="h-4 w-4 text-[#8a6040]" />
-                  Odak
-                </span>
+              <div className="library-stat-row">
+                <span><Clock aria-hidden className="h-4 w-4" />Odak</span>
                 <strong>{formatFocusDuration(stats.totalFocusSeconds)}</strong>
               </div>
-              <div className="flex items-center justify-between gap-3">
+              <div className="library-stat-row">
                 <span>Toplam XP</span>
                 <strong>{stats.totalAwardedXp}</strong>
               </div>
             </div>
 
-            <div className="rounded-md border border-[#bba88c] bg-[#efe3d0] p-4 text-sm text-[#6e5c47]">
-              <div className="font-semibold text-[#2f251b]">Son çalışma</div>
-              <div className="mt-1">
-                {formatRelativeStudyDate(stats.lastStudiedAt ?? book.lastStudiedAt)}
-              </div>
-              <div className="mt-3 font-semibold text-[#2f251b]">Not durumu</div>
-              <div className="mt-1">{noteUpdatedText}</div>
+            <div className="library-dialog-inset library-notebook-history">
+              <p className="library-stat-label">Son çalışma</p>
+              <p>{formatRelativeStudyDate(stats.lastStudiedAt ?? book.lastStudiedAt)}</p>
+              <p className="library-stat-label">Not durumu</p>
+              <p>{noteUpdatedText}</p>
             </div>
           </aside>
 
-          <label className="grid min-h-[46dvh] min-w-0 gap-2 lg:min-h-0" htmlFor={noteInputId}>
-            <span className="text-sm font-semibold text-[#6e5c47]">Ana not</span>
+          <label className="library-notebook-page" htmlFor={noteInputId}>
+            <span className="library-field-label">Ana not</span>
             <textarea
               id={noteInputId}
-              className="min-h-[52dvh] w-full min-w-0 resize-none rounded-md border border-[#bba88c] bg-[#fffaf1] px-4 py-4 text-base leading-8 text-[#2f251b] outline-none transition placeholder:text-[#9c8975] focus:border-[#8a6040] lg:min-h-full"
+              className="library-notebook-editor"
               disabled={pendingAction !== null}
               placeholder="Bu kitap veya proje için çalışma notlarını yaz..."
               value={draftNote}
@@ -230,18 +218,18 @@ export const BookNoteDialog = ({
           </label>
         </main>
 
-        <footer className="border-t border-[#bba88c] px-4 py-4 sm:px-6">
+        <footer className="library-dialog-footer">
           {recoveryActions}
           {saveError ? (
-            <p ref={saveErrorRef} role="alert" tabIndex={-1} className="mb-3 break-words rounded-md border border-[#d69b87] bg-[#f9e1d8] p-3 text-sm text-[#6a3727]">{saveError}</p>
+            <p ref={saveErrorRef} role="alert" tabIndex={-1} className="library-dialog-alert library-dialog-alert--danger">{saveError}</p>
           ) : null}
           {confirmDiscard ? (
-            <div role="alert" className="mb-3 rounded-md border border-[#d69b87] bg-[#f9e1d8] p-3 text-sm text-[#6a3727]">
+            <div role="alert" className="library-dialog-alert library-dialog-alert--danger">
               <p>Kaydedilmemiş değişikliklerin var. Kaydetmeden kapatmak istiyor musun?</p>
-              <div className="mt-3 flex flex-wrap justify-end gap-2">
+              <div className="library-dialog-actions">
                 <button
                   ref={cancelDiscardRef}
-                  className={`min-h-10 rounded-[4px] px-3 font-semibold ${libraryTheme.current.secondaryButton} ${libraryTheme.current.focusRing}`}
+                  className="library-button library-button--quiet"
                   disabled={pendingAction !== null}
                   type="button"
                   onClick={cancelDiscard}
@@ -249,7 +237,7 @@ export const BookNoteDialog = ({
                   Düzenlemeye devam et
                 </button>
                 <button
-                  className={`min-h-10 rounded-[4px] bg-[#a3482d] px-3 font-semibold text-white hover:bg-[#883a24] ${libraryTheme.current.focusRing}`}
+                  className="library-button library-dialog-danger-button"
                   disabled={pendingAction !== null}
                   type="button"
                   onClick={onClose}
@@ -259,33 +247,32 @@ export const BookNoteDialog = ({
               </div>
             </div>
           ) : null}
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button
-            className={`flex h-11 items-center justify-center gap-2 rounded-[4px] px-4 text-sm font-semibold ${libraryTheme.current.secondaryButton} ${libraryTheme.current.focusRing}`}
-            type="button"
-            disabled={pendingAction !== null}
-            onClick={requestClose}
-          >
-            <X aria-hidden className="h-4 w-4" />
-            Vazgeç
-          </button>
-          <button
-            className="flex h-11 items-center justify-center gap-2 rounded-[4px] border border-[#9b704d] bg-[#efe3d0] px-4 text-sm font-semibold text-[#5a3b25] transition hover:bg-[#e5d2b3]"
-            type="button"
-            disabled={pendingAction !== null}
-            onClick={() => void saveDraft("archive")}
-          >
-            <Archive aria-hidden className="h-4 w-4" />
-            {pendingAction === "archive" ? "Kaydediliyor…" : "Kaydet ve Depoya Kaldır"}
-          </button>
-          <button
-            className={`flex h-11 items-center justify-center gap-2 rounded-[4px] px-4 text-sm font-semibold ${libraryTheme.current.primaryButton} ${libraryTheme.current.focusRing}`}
-            type="submit"
-            disabled={pendingAction !== null}
-          >
-            <Save aria-hidden className="h-4 w-4" />
-            {pendingAction === "save" ? "Kaydediliyor…" : "Kaydet"}
-          </button>
+          <div className="library-dialog-actions library-notebook-actions">
+            <button
+              className="library-button library-button--quiet"
+              type="button"
+              disabled={pendingAction !== null}
+              onClick={requestClose}
+            >
+              <X aria-hidden className="h-4 w-4" />Vazgeç
+            </button>
+            <button
+              className="library-button library-button--quiet"
+              type="button"
+              disabled={pendingAction !== null}
+              onClick={() => void saveDraft("archive")}
+            >
+              <Archive aria-hidden className="h-4 w-4" />
+              {pendingAction === "archive" ? "Kaydediliyor…" : "Kaydet ve Depoya Kaldır"}
+            </button>
+            <button
+              className="library-button library-button--primary"
+              type="submit"
+              disabled={pendingAction !== null}
+            >
+              <Save aria-hidden className="h-4 w-4" />
+              {pendingAction === "save" ? "Kaydediliyor…" : "Kaydet"}
+            </button>
           </div>
         </footer>
       </form>

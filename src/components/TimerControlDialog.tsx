@@ -120,176 +120,131 @@ export const TimerControlDialog = ({
   return (
     <LibraryDialog
       aria-label="Odak saati"
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#1f120b]/80 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-6"
+      className="library-dialog--timer"
       dismissOnBackdrop
       onClose={onClose}
     >
-      <section
-        aria-busy={isSaving}
-        className="relative my-auto grid w-full min-w-0 max-w-xl shrink-0 gap-5 rounded-lg border-x-2 border-t-2 border-b-[4px] border-[#6a3b20] bg-[#8a5a35] p-4 shadow-[0_16px_32px_rgba(0,0,0,0.8),inset_0_2px_4px_rgba(255,255,255,0.1)] sm:p-6"
-        style={{ backgroundImage: 'url(/lofi_shelf_wood.png)', backgroundSize: '100% 100%', backgroundBlendMode: 'luminosity' }}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-amber-100/70">
-              Odak saati
-            </p>
-            <h2 className="mt-1.5 truncate text-xl font-bold uppercase tracking-wider text-amber-50 drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
+      <section aria-busy={isSaving} className="library-panel library-dialog-panel library-timer-panel">
+        <header className="library-dialog-header">
+          <div className="library-dialog-heading">
+            <p className="library-eyebrow">Odak saati</p>
+            <h2 className="library-dialog-title">
               {selectedBook ? selectedBook.title : "Yeni kitap kazan"}
             </h2>
           </div>
           <button
             aria-label="Kapat"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] border border-[#6a3b20] border-b-[3px] bg-[#6f3f22] text-amber-50 shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#83502c] hover:brightness-110 active:translate-y-[2px] active:border-b border-[#6a3b20] active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+            className="library-button library-button--quiet library-dialog-close"
             type="button"
             onClick={onClose}
           >
-            <X aria-hidden className="h-4 w-4" />
+            <X aria-hidden className="h-5 w-5" />
           </button>
-        </div>
+        </header>
 
-        {recoveryMessage ? (
-          <p role="status" className="rounded-md border border-amber-300/45 bg-[#3a2114]/75 px-3 py-2 text-sm text-amber-50">
-            {recoveryMessage}
-          </p>
-        ) : null}
-
-        {recoveryActions}
-
-        {visibleError ? (
-          <p ref={errorRef} role="alert" tabIndex={-1} className="break-words rounded-md border border-[#d69b87] bg-[#f9e1d8] px-3 py-2 text-sm text-[#6a3727]">
-            {visibleError}
-          </p>
-        ) : null}
-
-        {/* Timer Box */}
-        <div className="relative overflow-hidden rounded-md border border-[#6a3b20] bg-[#6f3f22]/50 p-3 sm:p-4 shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)]">
-          <div aria-label={`Kalan süre: ${minutes} dakika ${seconds} saniye`} role="timer" className="relative z-10 flex items-center justify-center gap-1.5 sm:gap-3">
-            <div aria-hidden className="flex h-24 sm:h-32 min-w-0 flex-1 items-center justify-center rounded-[4px] border-[2px] border-[#140c08] bg-[#0c0704] shadow-[inset_0_2px_12px_rgba(0,0,0,0.9)]">
-              <span className="font-mono text-[clamp(2.75rem,13vw,6rem)] font-black tracking-wider text-amber-500 drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]">
-                {minutes}
-              </span>
-            </div>
-            <div aria-hidden className="flex h-24 sm:h-32 flex-col items-center justify-center gap-4 px-1 sm:px-2">
-              <span className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]" />
-              <span className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]" />
-            </div>
-            <div aria-hidden className="flex h-24 sm:h-32 min-w-0 flex-1 items-center justify-center rounded-[4px] border-[2px] border-[#140c08] bg-[#0c0704] shadow-[inset_0_2px_12px_rgba(0,0,0,0.9)]">
-              <span className="font-mono text-[clamp(2.75rem,13vw,6rem)] font-black tracking-wider text-amber-500 drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]">
-                {seconds}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* XP Section */}
-        <div className="grid gap-3 rounded-md border border-[#6a3b20] bg-[#6f3f22]/50 p-4 shadow-[inset_0_2px_6px_rgba(0,0,0,0.4)]">
-          <div className="flex items-center justify-between gap-3 text-xs uppercase font-bold tracking-wider">
-            <span className="text-amber-100/70">
-              {isSelectingBook ? "Kütüphaneden bir kitap seçiliyor" : "Günlük XP"}
-            </span>
-            <span className="text-amber-50">
-              {dailyXp}/{DAILY_XP_LIMIT}
-            </span>
-          </div>
-          <div className="h-2.5 overflow-hidden rounded-full bg-[#140c08] border border-[#6a3b20] shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]">
-            <div
-              className="h-full rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] transition-all duration-500 ease-out"
-              style={{ width: `${dailyProgress}%` }}
-            />
-          </div>
-          {selectedBook ? (
-            <div className="grid gap-2 mt-2">
-              <div className="flex items-center justify-between gap-3 text-[10px] uppercase font-bold tracking-wider text-amber-100/70">
-                <span className="truncate text-amber-50">
-                  Lv {selectedBook.level} - {selectedBook.title}
-                </span>
-                <span>
-                  {selectedBookXp}/{XP_PER_LEVEL} XP
-                </span>
-              </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-[#140c08] border border-[#6a3b20] shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]">
-                <div
-                  className="h-full rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)] transition-all duration-500 ease-out"
-                  style={{ width: `${selectedBookProgress}%` }}
-                />
-              </div>
-            </div>
+        <div className="library-dialog-body library-timer-body">
+          {recoveryMessage ? <p role="status" className="library-dialog-alert">{recoveryMessage}</p> : null}
+          {recoveryActions}
+          {visibleError ? (
+            <p ref={errorRef} role="alert" tabIndex={-1} className="library-dialog-alert library-dialog-alert--danger">
+              {visibleError}
+            </p>
           ) : null}
-        </div>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-[auto_auto_1fr] gap-3 sm:grid-cols-[auto_auto_auto_1fr]">
-          <button
-            aria-label={isRunning ? "Duraklat" : "Başlat"}
-            disabled={isSaving}
-            className="flex h-12 w-12 items-center justify-center rounded-[4px] border-b-[3px] border-[#925f2b] bg-[#c28442] text-[#2a170a] shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#d99b59] hover:brightness-110 active:translate-y-[3px] active:border-b-0 active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-            type="button"
-            onClick={() => void saveChange(isRunning ? onPause : onStart)}
-          >
-            {isRunning ? (
-              <Pause aria-hidden className="h-6 w-6 fill-current" />
-            ) : (
-              <Play aria-hidden className="h-6 w-6 fill-current ml-1" />
-            )}
-          </button>
-          <button
-            aria-label="Sıfırla"
-            disabled={isSaving}
-            className="flex h-12 w-12 items-center justify-center rounded-[4px] border border-[#6a3b20] border-b-[3px] bg-[#6f3f22] text-amber-50 shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#83502c] hover:brightness-110 active:translate-y-[2px] active:border-b border-[#6a3b20] active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-            type="button"
-            onClick={() => void saveChange(onReset)}
-          >
-            <RotateCcw aria-hidden className="h-5 w-5" />
-          </button>
-          <button
-            className="flex h-12 items-center justify-center gap-2 rounded-[4px] border border-[#6a3b20] border-b-[3px] bg-[#6f3f22] px-4 text-sm font-bold uppercase tracking-wider text-[#10b981] shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#83502c] hover:brightness-110 active:translate-y-[2px] active:border-b border-[#6a3b20] active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-45"
-            disabled={!canFinish || isSaving}
-            type="button"
-            onClick={() => void saveChange(onFinish)}
-          >
-            <Sparkles aria-hidden className="h-4 w-4" />
-            Bitir
-          </button>
+          <div className="library-timer-face" data-running={isRunning}>
+            <span className="library-timer-ornament" aria-hidden="true">✦</span>
+            <p className="library-timer-phase">{isRunning ? "Odak zamanı" : canFinish ? "Odak duraklatıldı" : "Bir sayfa daha"}</p>
+            <div
+              aria-label={`Kalan süre: ${minutes} dakika ${seconds} saniye`}
+              role="timer"
+              className="library-timer-digits"
+            >
+              <span aria-hidden="true">{minutes}<span className="library-timer-colon">:</span>{seconds}</span>
+            </div>
+            <p className="library-timer-caption">Pomodoro · 25 dakika</p>
+          </div>
+
+          <div className="library-timer-controls">
+            <button
+              aria-label="Sıfırla"
+              disabled={isSaving}
+              className="library-button library-button--quiet library-timer-small-control"
+              type="button"
+              onClick={() => void saveChange(onReset)}
+            >
+              <RotateCcw aria-hidden className="h-5 w-5" />
+            </button>
+            <button
+              aria-label={isRunning ? "Duraklat" : "Başlat"}
+              disabled={isSaving}
+              className="library-button library-timer-play"
+              type="button"
+              onClick={() => void saveChange(isRunning ? onPause : onStart)}
+            >
+              {isRunning ? <Pause aria-hidden className="h-7 w-7 fill-current" /> : <Play aria-hidden className="ml-1 h-7 w-7 fill-current" />}
+            </button>
+            <button
+              className="library-button library-button--quiet library-timer-finish"
+              disabled={!canFinish || isSaving}
+              type="button"
+              onClick={() => void saveChange(onFinish)}
+            >
+              <Sparkles aria-hidden className="h-4 w-4" />Bitir
+            </button>
+          </div>
+
+          <div className="library-dialog-inset library-timer-progress">
+            <div className="library-stat-row">
+              <span>{isSelectingBook ? "Kütüphaneden bir kitap seçiliyor" : "Günlük XP"}</span>
+              <strong>{dailyXp}/{DAILY_XP_LIMIT}</strong>
+            </div>
+            <div className="library-meter" aria-hidden="true">
+              <div className="library-meter-fill library-meter-fill--emerald" style={{ width: `${dailyProgress}%` }} />
+            </div>
+            {selectedBook ? (
+              <div className="library-timer-book-progress">
+                <div className="library-stat-row">
+                  <span className="library-timer-book-title">Lv {selectedBook.level} · {selectedBook.title}</span>
+                  <strong>{selectedBookXp}/{XP_PER_LEVEL} XP</strong>
+                </div>
+                <div className="library-meter" aria-hidden="true">
+                  <div className="library-meter-fill" style={{ width: `${selectedBookProgress}%` }} />
+                </div>
+              </div>
+            ) : null}
+          </div>
+
           <button
             aria-pressed={isSelectingBook}
             disabled={isSaving}
-            className={`col-span-3 flex h-12 items-center justify-center gap-2 rounded-[4px] border border-[#6a3b20] border-b-[3px] px-4 text-sm font-bold uppercase tracking-wider text-amber-50 shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all sm:col-span-1 hover:brightness-110 active:translate-y-[2px] active:border-b border-[#6a3b20] active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
-              isSelectingBook ? "bg-[#83502c] translate-y-[2px] border-b border-[#6a3b20] shadow-none" : "bg-[#6f3f22] hover:bg-[#83502c]"
-            }`}
+            className="library-button library-button--quiet library-timer-select"
             type="button"
             onClick={onRequestBookSelection}
           >
-            <BookOpen aria-hidden className="h-4 w-4" />
-            Kitap seç
+            <BookOpen aria-hidden className="h-4 w-4" />Kitap seç
           </button>
+          {selectedBook ? (
+            <button
+              className="library-button library-button--quiet library-timer-select"
+              type="button"
+              disabled={isSaving}
+              onClick={() => void saveChange(onClearTarget)}
+            >
+              Yeni kitap kazan
+            </button>
+          ) : null}
+
+          {rewardMessage ? (
+            <button
+              aria-label="Odak ödülünü kapat"
+              className="library-button library-timer-reward"
+              type="button"
+              onClick={onClearReward}
+            >
+              <span role="status"><Sparkles aria-hidden className="h-5 w-5" />{rewardMessage}</span>
+            </button>
+          ) : null}
         </div>
-
-        {selectedBook ? (
-          <button
-            className="h-10 rounded-[4px] border border-[#6a3b20] border-b-[3px] bg-[#8a5a35] text-sm font-bold uppercase tracking-wider text-amber-50 shadow-[0_4px_6px_rgba(0,0,0,0.3)] transition-all hover:bg-[#6f3f22] active:translate-y-[2px] active:border-b border-[#6a3b20] active:shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-            type="button"
-            disabled={isSaving}
-            onClick={() => void saveChange(onClearTarget)}
-          >
-            Yeni kitap kazan
-          </button>
-        ) : null}
-
-        {rewardMessage ? (
-          <button
-            aria-label="Odak ödülünü kapat"
-            className="rounded-md border-2 border-[#6a3b20] bg-[#8a5a35] px-4 py-3 text-left text-sm font-bold tracking-wider text-amber-50 shadow-[0_8px_16px_rgba(0,0,0,0.6)] transition hover:bg-[#6f3f22]"
-            type="button"
-            onClick={onClearReward}
-            style={{ backgroundImage: 'url(/lofi_shelf_wood.png)', backgroundSize: '100% 100%', backgroundBlendMode: 'luminosity' }}
-          >
-            <span role="status" className="flex items-center gap-2">
-              <Sparkles aria-hidden className="h-4 w-4 text-amber-400" />
-              {rewardMessage}
-            </span>
-          </button>
-        ) : null}
       </section>
     </LibraryDialog>
   );

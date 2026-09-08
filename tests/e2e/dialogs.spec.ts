@@ -7,6 +7,23 @@ const openBook = async (page: Page) => {
   return dialog;
 };
 
+test("açık defterde ekran değişince odak aynı kitabın mobil düğmesine döner", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const book = page.locator('[data-item-id="book-1"]');
+  await book.focus();
+  await page.keyboard.press("Enter");
+  const dialog = page.getByRole("dialog", { name: /çalışma defteri/ });
+  await expect(dialog).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator("[data-mobile-library]")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(book).toBeFocused();
+  await expect(book).toBeInViewport();
+});
+
 test("notun boşlukları ve satır sonları kaydetme ve yenilemede korunur", async ({ page }) => {
   await page.goto("/");
   const dialog = await openBook(page);

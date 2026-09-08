@@ -30,6 +30,16 @@ export const LibraryDialog = ({
     if (!dialog) return;
 
     const previouslyFocused = document.activeElement;
+    const openerItemId =
+      previouslyFocused instanceof HTMLElement
+        ? (previouslyFocused.dataset.itemId ??
+          previouslyFocused.closest<HTMLElement>("[data-item-id]")?.dataset
+            .itemId)
+        : undefined;
+    const openerFocusKey =
+      previouslyFocused instanceof HTMLElement
+        ? previouslyFocused.dataset.focusKey
+        : undefined;
     if (openDialogCount === 0) {
       previousBodyOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
@@ -43,8 +53,24 @@ export const LibraryDialog = ({
       if (openDialogCount === 0) {
         document.body.style.overflow = previousBodyOverflow;
       }
-      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
+      if (
+        previouslyFocused instanceof HTMLElement &&
+        previouslyFocused.isConnected
+      ) {
         previouslyFocused.focus({ preventScroll: true });
+      } else {
+        // A responsive scene change replaces the item and its clock controls.
+        const replacementControl = openerFocusKey
+          ? document.querySelector<HTMLElement>(
+              `[data-focus-key="${CSS.escape(openerFocusKey)}"]`,
+            )
+          : null;
+        const replacementItem = openerItemId
+          ? document.querySelector<HTMLElement>(
+              `[data-item-id="${CSS.escape(openerItemId)}"]`,
+            )
+          : null;
+        (replacementControl ?? replacementItem)?.focus();
       }
     };
   }, []);
@@ -54,14 +80,18 @@ export const LibraryDialog = ({
       {...props}
       ref={dialogRef}
       aria-modal="true"
-      className={`m-0 h-[100dvh] max-h-none w-screen max-w-none border-0 text-inherit outline-none [&:not([open])]:hidden [&::backdrop]:bg-transparent ${className}`}
+      className={`library-dialog ${className}`}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
       }}
       onKeyDown={(event) => {
         onKeyDown?.(event);
-        if (event.key === "Escape" && !event.defaultPrevented && !event.nativeEvent.isComposing) {
+        if (
+          event.key === "Escape" &&
+          !event.defaultPrevented &&
+          !event.nativeEvent.isComposing
+        ) {
           // Repeated native Escape requests can become non-cancelable. Keep
           // dismissal in React so an unsaved draft cannot bypass confirmation.
           event.preventDefault();

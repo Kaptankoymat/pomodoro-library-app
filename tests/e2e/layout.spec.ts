@@ -20,6 +20,8 @@ const seedShelf = async (page: Page) => {
   }, state);
   await page.goto("/");
   await expect(page.locator('[data-item-id="painting"]')).toHaveAttribute("data-grid-col", "4");
+  // The immersive shelves scroll vertically on wide, short desktop windows.
+  await page.locator('[data-item-id="sticky"]').scrollIntoViewIfNeeded();
   // The first ResizeObserver measurement briefly disables dragging.
   await page.waitForTimeout(200);
 };
@@ -38,7 +40,7 @@ const beginDrag = async (page: Page, item: Locator, target: { x: number; y: numb
   await expect(page.locator("[data-drag-ghost]")).toHaveCount(1);
 };
 
-for (const width of [1280, 390]) {
+for (const width of [1280, 1920]) {
   test.describe(`${width}px shelf dragging`, () => {
     test.use({ viewport: { width, height: 900 } });
 
